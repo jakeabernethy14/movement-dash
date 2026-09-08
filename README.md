@@ -23,7 +23,10 @@ A Next.js 14 + Supabase dashboard for a personal training business, styled dark 
    This creates all tables, the `account_type` enum, RLS policies, and the `redeem_register_token` function.
 3. Go to **Authentication → Sign In / Providers → Email** and decide whether "Confirm email" is on or off
    (the in-app Settings toggle is a preference flag for your own reference — flip the real switch here too).
-4. Grab your **Project URL** and **anon public key** from **Project Settings → API**.
+4. Grab your **Project URL** and **Publishable key** from **Project Settings → API Keys**
+   (the newer `sb_publishable_...` key — Supabase's current recommended replacement for the older
+   `anon` key; the app also accepts a legacy `anon` key if that's what your project has under
+   `NEXT_PUBLIC_SUPABASE_ANON_KEY`).
 
 ### Creating your own Owner account
 
@@ -60,7 +63,7 @@ register through the app UI with that token, and use the SQL above to also grant
 ```bash
 npm install
 cp .env.local.example .env.local
-# edit .env.local with your Supabase URL + anon key
+# edit .env.local with your Supabase URL + publishable key
 npm run dev
 ```
 
@@ -70,10 +73,17 @@ Visit `http://localhost:3000`.
 
 1. Push this repo to GitHub.
 2. Import it in [Vercel](https://vercel.com/new).
-3. Add the two environment variables (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`) in
-   **Project Settings → Environment Variables**.
+3. Add the two environment variables (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`) in
+   **Project Settings → Environment Variables** — do this **before** your first deploy if possible.
+   `NEXT_PUBLIC_*` vars are baked into the app at build time, so if you add or change them after a
+   deploy, you need to trigger a new deployment (Vercel → Deployments → "..." → Redeploy) for the
+   change to take effect.
 4. Deploy. That's it — no server/API routes are required since all data access goes through
    Supabase directly from the browser, protected by Row Level Security.
+
+> The build is safe even if these env vars are briefly missing (e.g. your very first deploy before
+> wiring up Supabase) — it'll fall back to placeholder values rather than crashing the build. The app
+> just won't be able to talk to Supabase at runtime until the real values are set and you redeploy.
 
 ## Project structure
 
