@@ -45,7 +45,7 @@ export default function ClientOverview({ userId }: { userId: string }) {
 
       const { data: notes } = await supabase
         .from("notes")
-        .select("*")
+        .select("*, author:profiles!notes_author_id_fkey(full_name, username)")
         .eq("client_id", userId)
         .eq("visibility", "shared")
         .order("created_at", { ascending: false })
@@ -127,6 +127,7 @@ export default function ClientOverview({ userId }: { userId: string }) {
               <div key={n.id} className="bg-base-850 border border-base-border rounded-lg p-2 text-sm">
                 <p className="text-neutral-200">{n.content}</p>
                 <span className="text-xs text-neutral-500">
+                  {n.author?.username || n.author?.full_name || "Your PT"} ·{" "}
                   {format(new Date(n.created_at), "d MMM, HH:mm")}
                 </span>
               </div>

@@ -67,30 +67,59 @@ export default function ProgramsPage() {
         </button>
       </div>
 
-      <div className="grid md:grid-cols-2 gap-4">
-        {plans.length === 0 && <p className="text-sm text-neutral-500">No training plans yet.</p>}
-        {plans.map((p) => (
-          <div key={p.id} className="card p-4">
-            <div className="flex justify-between items-start">
-              <div>
-                <h3 className="font-semibold">{p.title}</h3>
-                <p className="text-sm text-neutral-400">{p.description}</p>
-              </div>
-              <div className="flex gap-2">
-                <button onClick={() => exportTrainingPlanPDF(p)} className="text-neutral-400 hover:text-gold-400">
-                  <Download size={16} />
-                </button>
-                <button onClick={() => deletePlan(p.id)} className="text-neutral-400 hover:text-red-400">
-                  <Trash2 size={16} />
-                </button>
-              </div>
-            </div>
-            <p className="text-xs text-neutral-500 mt-2">{p.content?.length ?? 0} day(s) programmed</p>
-            <button onClick={() => setEditing(p)} className="btn-secondary text-sm mt-3 w-full">
-              Edit
-            </button>
-          </div>
-        ))}
+      <div className="card overflow-hidden">
+        <table className="w-full text-sm">
+          <thead className="bg-base-850 text-neutral-400 text-left">
+            <tr>
+              <th className="px-4 py-3 font-medium">Title</th>
+              <th className="px-4 py-3 font-medium">Description</th>
+              <th className="px-4 py-3 font-medium">Days</th>
+              <th className="px-4 py-3 font-medium">Updated</th>
+              <th className="px-4 py-3 font-medium"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {plans.length === 0 && (
+              <tr>
+                <td className="px-4 py-6 text-neutral-500" colSpan={5}>
+                  No training plans yet. Create one to start assigning it to clients.
+                </td>
+              </tr>
+            )}
+            {plans.map((p) => (
+              <tr key={p.id} className="border-t border-base-border hover:bg-base-850/60">
+                <td className="px-4 py-3 font-medium">{p.title}</td>
+                <td className="px-4 py-3 text-neutral-400 max-w-xs truncate">{p.description || "—"}</td>
+                <td className="px-4 py-3 text-neutral-400">{p.content?.length ?? 0}</td>
+                <td className="px-4 py-3 text-neutral-500">
+                  {new Date(p.updated_at).toLocaleDateString()}
+                </td>
+                <td className="px-4 py-3 text-right whitespace-nowrap">
+                  <button
+                    onClick={() => exportTrainingPlanPDF(p)}
+                    className="text-neutral-400 hover:text-gold-400 mr-3"
+                    title="Export PDF"
+                  >
+                    <Download size={16} className="inline" />
+                  </button>
+                  <button
+                    onClick={() => setEditing(p)}
+                    className="text-gold-400 hover:underline text-sm mr-3"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    onClick={() => deletePlan(p.id)}
+                    className="text-neutral-400 hover:text-red-400"
+                    title="Delete"
+                  >
+                    <Trash2 size={16} className="inline" />
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   );

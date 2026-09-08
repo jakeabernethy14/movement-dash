@@ -8,6 +8,7 @@ export default function RegisterPage() {
   const router = useRouter();
   const supabase = createClient();
   const [fullName, setFullName] = useState("");
+  const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [token, setToken] = useState("");
@@ -34,6 +35,18 @@ export default function RegisterPage() {
     setError(null);
     setLoading(true);
 
+    // Validate the token BEFORE creating an auth account, so a bad/used token
+    // never leaves an orphaned account behind.
+    const { data: tokenValid, error: validateError } = await supabase.rpc("validate_register_token", {
+      p_token: token.trim(),
+    });
+
+    if (validateError || !tokenValid) {
+      setError("That registration token is invalid, expired, or already used up.");
+      setLoading(false);
+      return;
+    }
+
     // 1. Create the auth user
     const { data, error: signUpError } = await supabase.auth.signUp({
       email,
@@ -57,11 +70,25 @@ export default function RegisterPage() {
     if (redeemError) {
       setError(
         redeemError.message.includes("INVALID_OR_EXPIRED_TOKEN")
-          ? "That registration token is invalid, expired, or already used up."
+          ? "That token was just used by someone else. Ask your trainer for a new one."
           : redeemError.message
       );
       setLoading(false);
       return;
+    }
+
+    // 3. Set the username, if provided (best-effort; ignore uniqueness conflicts silently
+    // other than surfacing them, since the account itself is already created successfully).
+    if (username.trim()) {
+      const { error: usernameError } = await supabase
+        .from("profiles")
+        .update({ username: username.trim() })
+        .eq("id", data.user.id);
+      if (usernameError) {
+        setError(
+          "Account created, but that username was already taken -- you can set one later from Account settings."
+        );
+      }
     }
 
     setSuccess(true);
@@ -136,6 +163,15 @@ export default function RegisterPage() {
                 className="input-field"
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="label-text">Username (optional)</label>
+              <input
+                className="input-field"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="Used to log in instead of your email"
               />
             </div>
             <div>

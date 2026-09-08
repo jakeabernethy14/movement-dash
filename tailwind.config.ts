@@ -16,16 +16,16 @@ const config: Config = {
           border: "#2e2e2e",
         },
         gold: {
-          50: "#fdf8ec",
-          100: "#faedc4",
-          200: "#f5da8d",
-          300: "#f0c355",
-          400: "#e9ad33",
-          500: "#d99a21", // primary accent
-          600: "#b87e18",
-          700: "#946116",
-          800: "#784f18",
-          900: "#654318",
+          50: "#fffceb",
+          100: "#fff3c4",
+          200: "#ffe58a",
+          300: "#ffd24d",
+          400: "#ffc61e", // bright primary accent
+          500: "#f5b800",
+          600: "#d99e00",
+          700: "#ad7c00",
+          800: "#8a6300",
+          900: "#6b4d00",
         },
       },
       fontFamily: {

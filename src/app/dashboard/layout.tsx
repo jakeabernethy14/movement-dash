@@ -12,6 +12,8 @@ import {
   LogOut,
   Menu,
   X,
+  NotebookPen,
+  UserCircle,
 } from "lucide-react";
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
@@ -30,17 +32,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     router.refresh();
   }
 
-  const staffLinks = [
-    { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
-    { href: "/dashboard/clients", label: "Clients", icon: Users },
-    { href: "/dashboard/programs", label: "Training Plans", icon: Dumbbell },
-    { href: "/dashboard/admin", label: "PT Admin", icon: ShieldCheck },
-  ];
-
   const clientLinks = [
     { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
     { href: "/dashboard/schedule", label: "Schedule / Program", icon: Calendar },
+    { href: "/dashboard/dailylog", label: "Daily Log", icon: NotebookPen },
     { href: "/dashboard/goals", label: "Goals", icon: Target },
+    { href: "/dashboard/account", label: "Account", icon: UserCircle },
   ];
 
   const ownerLinks = [
@@ -49,7 +46,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   ];
 
   let links = [...clientLinks];
-  if (session.isTrainer || session.isOwner) links = [...staffLinks];
+  if (session.isTrainer || session.isOwner) {
+    links = [
+      { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
+      { href: "/dashboard/clients", label: "Clients", icon: Users },
+      { href: "/dashboard/programs", label: "Training Plans", icon: Dumbbell },
+      { href: "/dashboard/admin", label: "PT Admin", icon: ShieldCheck },
+      { href: "/dashboard/account", label: "Account", icon: UserCircle },
+    ];
+  }
   if (session.isOwner) links = [...links, ...ownerLinks];
 
   const initials = (session.profile?.full_name || session.profile?.email || "?")
@@ -123,7 +128,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       </aside>
 
       <main className="flex-1 pt-14 md:pt-0 min-h-screen bg-base-950">
-        <div className="max-w-6xl mx-auto p-4 md:p-8">{children}</div>
+        <div className="max-w-screen-2xl mx-auto p-4 md:p-10">{children}</div>
       </main>
     </div>
   );

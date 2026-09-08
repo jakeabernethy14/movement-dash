@@ -16,6 +16,7 @@ export default function AdminPage() {
   const [clients, setClients] = useState<any[]>([]);
   const [expiresInDays, setExpiresInDays] = useState("30");
   const [maxUses, setMaxUses] = useState("1");
+  const [accessDays, setAccessDays] = useState("30");
 
   async function load() {
     if (!session.userId) return;
@@ -48,6 +49,7 @@ export default function AdminPage() {
       pt_id: session.userId,
       created_by: session.userId,
       max_uses: Number(maxUses) || 1,
+      access_days: accessDays ? Number(accessDays) : null,
       expires_at,
     });
     load();
@@ -74,16 +76,24 @@ export default function AdminPage() {
       <div className="card p-4 space-y-3">
         <h3 className="font-semibold">Generate a registration token</h3>
         <p className="text-sm text-neutral-400">
-          Share this token with a new client — when they register with it, they'll automatically be assigned to you.
+          Share this token with a new client — when they register with it, they'll automatically be assigned to you
+          and granted the access duration below (their account is <em>frozen</em>, not deleted, once that runs out —
+          you can always extend it later from their Details tab).
         </p>
         <div className="flex flex-wrap gap-3 items-end">
           <div>
-            <label className="label-text">Expires in (days)</label>
+            <label className="label-text">Token expires in (days)</label>
             <input
-              className="input-field w-32"
+              className="input-field w-36"
               value={expiresInDays}
               onChange={(e) => setExpiresInDays(e.target.value)}
             />
+            <p className="text-[10px] text-neutral-500 mt-1">How long the token itself stays redeemable.</p>
+          </div>
+          <div>
+            <label className="label-text">Client access duration (days)</label>
+            <input className="input-field w-36" value={accessDays} onChange={(e) => setAccessDays(e.target.value)} />
+            <p className="text-[10px] text-neutral-500 mt-1">Blank = unlimited access.</p>
           </div>
           <div>
             <label className="label-text">Max uses</label>

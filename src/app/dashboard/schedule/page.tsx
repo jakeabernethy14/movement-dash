@@ -61,21 +61,79 @@ export default function SchedulePage() {
           {events.length === 0 && <p className="text-sm text-neutral-500">Nothing scheduled this day.</p>}
           <div className="space-y-3">
             {events.map((e) => (
-              <div key={e.id} className="bg-base-850 border border-base-border rounded-lg p-3">
-                <div className="flex justify-between">
-                  <span className="font-medium">{e.title}</span>
-                  <span className="badge badge-gold">{e.event_type}</span>
-                </div>
-                {(e.start_time || e.end_time) && (
-                  <p className="text-xs text-neutral-500 mt-1">
-                    {e.start_time?.slice(0, 5)} {e.end_time ? `– ${e.end_time.slice(0, 5)}` : ""}
-                  </p>
-                )}
-                {e.description && <p className="text-sm text-neutral-300 mt-2">{e.description}</p>}
-              </div>
+              <SessionCard key={e.id} event={e} onUpdated={() => {
+                supabase
+                  .from("schedule_events")
+                  .select("*")
+                  .eq("client_id", session.userId)
+                  .eq("event_date", format(selectedDate, "yyyy-MM-dd"))
+                  .then(({ data }) => setEvents(data ?? []));
+              }} />
             ))}
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function SessionCard({ event, onUpdated }: { event: any; onUpdated: () => void }) {
+  const supabase = createClient();
+  const [response, setResponse] = useState(event.client_response ?? "");
+  const [saving, setSaving] = useState(false);
+  const [editing, setEditing] = useState(!event.client_response);
+
+  async function save() {
+    setSaving(true);
+    await supabase
+      .from("schedule_events")
+      .update({
+        client_response: response,
+        client_completed: true,
+        responded_at: new Date().toISOString(),
+      })
+      .eq("id", event.id);
+    setSaving(false);
+    setEditing(false);
+    onUpdated();
+  }
+
+  return (
+    <div className="bg-base-850 border border-base-border rounded-lg p-3">
+      <div className="flex justify-between">
+        <span className="font-medium">{event.title}</span>
+        <span className="badge badge-gold">{event.event_type}</span>
+      </div>
+      {(event.start_time || event.end_time) && (
+        <p className="text-xs text-neutral-500 mt-1">
+          {event.start_time?.slice(0, 5)} {event.end_time ? `– ${event.end_time.slice(0, 5)}` : ""}
+        </p>
+      )}
+      {event.description && <p className="text-sm text-neutral-300 mt-2">{event.description}</p>}
+
+      <div className="mt-3 pt-3 border-t border-base-border">
+        {!editing && event.client_response ? (
+          <div>
+            <p className="text-xs text-green-400 font-medium mb-1">Your logged result</p>
+            <p className="text-sm text-neutral-200">{event.client_response}</p>
+            <button onClick={() => setEditing(true)} className="text-xs text-gold-400 hover:underline mt-2">
+              Edit
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <textarea
+              className="input-field resize-none text-sm"
+              rows={2}
+              placeholder="How did this session go? Log your result / notes…"
+              value={response}
+              onChange={(e) => setResponse(e.target.value)}
+            />
+            <button onClick={save} disabled={saving || !response.trim()} className="btn-primary text-sm px-3 py-1.5">
+              {saving ? "Saving…" : "Save result"}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

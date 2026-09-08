@@ -3,10 +3,13 @@ export type AccountType = "owner" | "trainer" | "client";
 export interface Profile {
   id: string;
   full_name: string;
+  username: string | null;
   email: string;
   phone: string | null;
   avatar_url: string | null;
+  bio: string | null;
   disabled: boolean;
+  access_expires_at: string | null;
   created_at: string;
 }
 
@@ -30,6 +33,7 @@ export interface RegisterToken {
   created_by: string | null;
   max_uses: number;
   use_count: number;
+  access_days: number | null;
   expires_at: string | null;
   created_at: string;
 }
@@ -69,15 +73,34 @@ export interface AssignedProgram {
 
 export interface ScheduleEvent {
   id: string;
-  client_id: string;
+  client_id: string | null;
   pt_id: string;
   title: string;
   description: string;
   event_date: string;
   start_time: string | null;
   end_time: string | null;
-  event_type: "training" | "checkup" | "rest" | "note";
+  event_type: "training" | "checkup" | "rest" | "note" | "class" | "call" | "other";
+  event_scope: "client" | "personal";
+  client_response: string | null;
+  client_completed: boolean;
+  responded_at: string | null;
   created_at: string;
+}
+
+export interface DailyLog {
+  id: string;
+  client_id: string;
+  pt_id: string | null;
+  log_date: string;
+  calories: number | null;
+  protein: number | null;
+  carbs: number | null;
+  fats: number | null;
+  training_notes: string;
+  mood: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface NutritionInfo {

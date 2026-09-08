@@ -7,7 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 export default function LoginPage() {
   const router = useRouter();
   const supabase = createClient();
-  const [email, setEmail] = useState("");
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [remember, setRemember] = useState(true);
   const [loading, setLoading] = useState(false);
@@ -18,7 +18,7 @@ export default function LoginPage() {
     // remembered email
     const saved = localStorage.getItem("tmc_remember_email");
     if (saved) {
-      setEmail(saved);
+      setIdentifier(saved);
       setRemember(true);
     }
     supabase
@@ -36,8 +36,20 @@ export default function LoginPage() {
     setError(null);
     setLoading(true);
 
+    // Resolve "email or username" to an actual email via a small RPC
+    // (profiles aren't readable pre-auth, so this uses a security-definer function).
+    const { data: resolvedEmail, error: resolveError } = await supabase.rpc("email_for_login", {
+      p_identifier: identifier.trim(),
+    });
+
+    if (resolveError || !resolvedEmail) {
+      setError("We couldn't find an account with that email or username.");
+      setLoading(false);
+      return;
+    }
+
     const { data, error: signInError } = await supabase.auth.signInWithPassword({
-      email,
+      email: resolvedEmail,
       password,
     });
 
@@ -47,10 +59,10 @@ export default function LoginPage() {
       return;
     }
 
-    // Check disabled flag
+    // Check disabled / access-expired flags
     const { data: profile } = await supabase
       .from("profiles")
-      .select("disabled")
+      .select("disabled, access_expires_at")
       .eq("id", data.user?.id)
       .single();
 
@@ -61,8 +73,15 @@ export default function LoginPage() {
       return;
     }
 
+    if (profile?.access_expires_at && new Date(profile.access_expires_at) < new Date()) {
+      await supabase.auth.signOut();
+      setError("Your account access has expired. Contact your trainer to renew it.");
+      setLoading(false);
+      return;
+    }
+
     if (remember) {
-      localStorage.setItem("tmc_remember_email", email);
+      localStorage.setItem("tmc_remember_email", identifier);
     } else {
       localStorage.removeItem("tmc_remember_email");
     }
@@ -95,14 +114,14 @@ export default function LoginPage() {
             </div>
           )}
           <div>
-            <label className="label-text">Email</label>
+            <label className="label-text">Email or username</label>
             <input
-              type="email"
+              type="text"
               required
               className="input-field"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@example.com"
+              value={identifier}
+              onChange={(e) => setIdentifier(e.target.value)}
+              placeholder="you@example.com or username"
             />
           </div>
           <div>

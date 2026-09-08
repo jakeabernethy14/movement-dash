@@ -8,10 +8,11 @@ interface Props {
   clientId: string;
   ptId: string;
   authorId: string;
-  canChooseVisibility?: boolean; // true for PT
+  canChooseVisibility?: boolean; // true for PT viewing a client
+  isSelfNote?: boolean; // true when a PT/owner is viewing their own personal notes
 }
 
-export default function NotesPanel({ clientId, ptId, authorId, canChooseVisibility }: Props) {
+export default function NotesPanel({ clientId, ptId, authorId, canChooseVisibility, isSelfNote }: Props) {
   const supabase = createClient();
   const [notes, setNotes] = useState<Note[]>([]);
   const [content, setContent] = useState("");
@@ -21,10 +22,10 @@ export default function NotesPanel({ clientId, ptId, authorId, canChooseVisibili
   async function load() {
     const { data } = await supabase
       .from("notes")
-      .select("*")
+      .select("*, author:profiles!notes_author_id_fkey(full_name, username)")
       .eq("client_id", clientId)
       .order("created_at", { ascending: false });
-    setNotes(data ?? []);
+    setNotes((data as any) ?? []);
     setLoading(false);
   }
 
@@ -59,6 +60,7 @@ export default function NotesPanel({ clientId, ptId, authorId, canChooseVisibili
           <div key={n.id} className="bg-base-850 border border-base-border rounded-lg p-3 text-sm">
             <div className="flex items-center justify-between mb-1">
               <span className="text-xs text-neutral-500">
+                {n.author?.username || n.author?.full_name || "Someone"} ·{" "}
                 {new Date(n.created_at).toLocaleString()}
               </span>
               {n.visibility === "pt_only" && (
@@ -89,6 +91,8 @@ export default function NotesPanel({ clientId, ptId, authorId, canChooseVisibili
               <option value="shared">Visible to client</option>
               <option value="pt_only">PT only</option>
             </select>
+          ) : isSelfNote ? (
+            <span className="text-xs text-neutral-500">Personal note</span>
           ) : (
             <span className="text-xs text-neutral-500 flex items-center gap-1">
               <Users size={12} /> Visible to your PT
