@@ -92,19 +92,32 @@ export default function LoginPage() {
 
   return (
     <main className="min-h-screen flex items-center justify-center px-4 relative overflow-hidden">
-      {/* subtle background glow */}
-      <div className="pointer-events-none absolute -top-40 -left-40 w-96 h-96 bg-gold-500/10 rounded-full blur-3xl" />
-      <div className="pointer-events-none absolute -bottom-40 -right-40 w-96 h-96 bg-gold-500/5 rounded-full blur-3xl" />
+      {/* ambient gold glow */}
+      <div
+        className="pointer-events-none absolute -top-1/3 left-1/2 -translate-x-1/2 w-[36rem] h-[36rem] rounded-full blur-3xl"
+        style={{ background: "radial-gradient(circle, rgba(212,175,55,0.10) 0%, rgba(212,175,55,0) 70%)" }}
+      />
+      <div
+        className="pointer-events-none absolute bottom-0 right-0 w-[28rem] h-[28rem] rounded-full blur-3xl"
+        style={{ background: "radial-gradient(circle, rgba(212,175,55,0.05) 0%, rgba(212,175,55,0) 70%)" }}
+      />
 
       <div className="w-full max-w-sm relative">
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gold-500/10 border border-gold-500/30 mb-4">
-            <span className="text-gold-400 text-2xl font-bold">M</span>
+          <div
+            className="inline-flex items-center justify-center w-14 h-14 rounded-2xl mb-4"
+            style={{
+              background: "linear-gradient(150deg, rgba(242,201,76,0.16), rgba(212,175,55,0.04))",
+              border: "1px solid rgba(212,175,55,0.35)",
+              boxShadow: "0 0 24px -8px rgba(212,175,55,0.5)",
+            }}
+          >
+            <span className="text-gold-300 text-2xl font-bold">M</span>
           </div>
-          <h1 className="text-2xl font-bold tracking-tight">
-            The <span className="text-gold-400">Movement</span> Coaching
+          <h1 className="text-2xl font-bold tracking-tight text-neutral-50">
+            The <span className="text-gold-300">Movement</span> Coaching
           </h1>
-          <p className="text-neutral-400 text-sm mt-1">Sign in to your dashboard</p>
+          <p className="text-neutral-500 text-sm mt-1.5 tracking-wide">Sign in to your dashboard</p>
         </div>
 
         <form onSubmit={handleLogin} className="card p-6 space-y-4">

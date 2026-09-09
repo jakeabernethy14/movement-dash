@@ -67,7 +67,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   return (
     <div className="min-h-screen flex">
       {/* Mobile top bar */}
-      <div className="md:hidden fixed top-0 inset-x-0 h-14 bg-base-900 border-b border-base-border flex items-center justify-between px-4 z-40">
+      <div className="md:hidden fixed top-0 inset-x-0 h-14 border-b flex items-center justify-between px-4 z-40" style={{background: "linear-gradient(180deg, #0d0d0d, #090909)", borderColor: "rgba(255,255,255,0.06)"}}>
         <span className="font-bold">
           The <span className="text-gold-400">Movement</span> Coaching
         </span>
@@ -78,9 +78,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
       {/* Sidebar */}
       <aside
-        className={`fixed md:static z-30 top-14 md:top-0 bottom-0 w-64 bg-base-900 border-r border-base-border flex flex-col transition-transform md:translate-x-0 ${
+        className={`fixed md:static z-30 top-14 md:top-0 bottom-0 w-64 border-r flex flex-col transition-transform md:translate-x-0 ${
           mobileOpen ? "translate-x-0" : "-translate-x-full"
         }`}
+        style={{ background: "linear-gradient(180deg, #0d0d0d, #070707)", borderColor: "rgba(255,255,255,0.06)" }}
       >
         <div className="hidden md:block p-5 border-b border-base-border">
           <span className="font-bold text-lg">
@@ -127,7 +128,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </div>
       </aside>
 
-      <main className="flex-1 pt-14 md:pt-0 min-h-screen bg-base-950">
+      <main className="flex-1 pt-14 md:pt-0 min-h-screen bg-transparent">
         <div className="max-w-screen-2xl mx-auto p-4 md:p-10">{children}</div>
       </main>
     </div>

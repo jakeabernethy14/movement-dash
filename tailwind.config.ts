@@ -7,25 +7,25 @@ const config: Config = {
     extend: {
       colors: {
         base: {
-          950: "#121212",
-          900: "#161616",
-          850: "#1b1b1b",
-          800: "#212121",
-          700: "#2a2a2a",
-          600: "#3a3a3a",
-          border: "#2e2e2e",
+          950: "#050505", // page background
+          900: "#090909", // secondary surface
+          850: "#0D0D0D", // secondary surface (alt)
+          800: "#111111", // elevated surface (cards)
+          700: "#1A1A1A", // elevated hover
+          600: "#262626",
+          border: "#242424",
         },
         gold: {
-          50: "#fffceb",
-          100: "#fff3c4",
-          200: "#ffe58a",
-          300: "#ffd24d",
-          400: "#ffc61e", // bright primary accent
-          500: "#f5b800",
-          600: "#d99e00",
-          700: "#ad7c00",
-          800: "#8a6300",
-          900: "#6b4d00",
+          50: "#FBF6E9",
+          100: "#F5E9C6",
+          200: "#E6CF82", // champagne highlight
+          300: "#F2C94C", // bright highlight gold
+          400: "#D4AF37", // primary gold
+          500: "#C4A02F",
+          600: "#A6871F",
+          700: "#806515", // dark gold
+          800: "#5C4A10",
+          900: "#3D310B",
         },
       },
       fontFamily: {

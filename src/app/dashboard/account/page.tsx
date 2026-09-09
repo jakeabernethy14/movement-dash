@@ -115,7 +115,7 @@ export default function AccountPage() {
           )}
           <button
             onClick={() => fileInputRef.current?.click()}
-            className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-gold-400 text-base-950 flex items-center justify-center shadow-[0_0_12px_-2px_rgba(255,198,30,0.7)]"
+            className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-gold-400 text-base-950 flex items-center justify-center shadow-[0_0_12px_-2px_rgba(212,175,55,0.75)]"
             title="Change photo"
           >
             <Camera size={13} />
