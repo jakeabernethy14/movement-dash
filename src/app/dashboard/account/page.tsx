@@ -2,7 +2,28 @@
 import { useEffect, useState, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useSession } from "@/lib/useSession";
-import { Camera } from "lucide-react";
+import { Camera, X } from "lucide-react";
+
+const COMMON_TIMEZONES = [
+  "UTC",
+  "Pacific/Auckland",
+  "Australia/Sydney",
+  "Australia/Perth",
+  "Asia/Tokyo",
+  "Asia/Singapore",
+  "Asia/Kolkata",
+  "Asia/Dubai",
+  "Europe/London",
+  "Europe/Paris",
+  "Europe/Berlin",
+  "Africa/Johannesburg",
+  "America/Sao_Paulo",
+  "America/New_York",
+  "America/Chicago",
+  "America/Denver",
+  "America/Los_Angeles",
+  "Pacific/Honolulu",
+];
 
 export default function AccountPage() {
   const supabase = createClient();
@@ -12,6 +33,7 @@ export default function AccountPage() {
   const [username, setUsername] = useState("");
   const [bio, setBio] = useState("");
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [timezone, setTimezone] = useState("UTC");
   const [newPassword, setNewPassword] = useState("");
   const [uploading, setUploading] = useState(false);
   const [msg, setMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
@@ -22,6 +44,7 @@ export default function AccountPage() {
     setUsername(session.profile.username ?? "");
     setBio(session.profile.bio ?? "");
     setAvatarUrl(session.profile.avatar_url ?? null);
+    setTimezone(session.profile.timezone || "UTC");
   }, [session.profile]);
 
   async function saveProfile() {
@@ -29,13 +52,20 @@ export default function AccountPage() {
     setMsg(null);
     const { error } = await supabase
       .from("profiles")
-      .update({ full_name: fullName, username: username || null, bio })
+      .update({ full_name: fullName, username: username || null, bio, timezone })
       .eq("id", session.userId);
     if (error) {
       setMsg({ type: "err", text: error.message.includes("duplicate") ? "That username is already taken." : error.message });
       return;
     }
     setMsg({ type: "ok", text: "Profile updated." });
+  }
+
+  async function removeAvatar() {
+    if (!session.userId) return;
+    await supabase.from("profiles").update({ avatar_url: null }).eq("id", session.userId);
+    setAvatarUrl(null);
+    setMsg({ type: "ok", text: "Profile picture removed." });
   }
 
   async function savePassword() {
@@ -122,11 +152,20 @@ export default function AccountPage() {
           </button>
           <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarChange} />
         </div>
-        <div>
+        <div className="flex-1">
           <p className="font-medium">{fullName || session.profile?.email}</p>
           <p className="text-sm text-neutral-500">{session.roles.join(" · ")}</p>
           {uploading && <p className="text-xs text-gold-400 mt-1">Uploading…</p>}
         </div>
+        {avatarUrl && (
+          <button
+            onClick={removeAvatar}
+            className="text-xs text-neutral-500 hover:text-red-400 flex items-center gap-1"
+            title="Remove profile picture"
+          >
+            <X size={12} /> Remove photo
+          </button>
+        )}
       </div>
 
       <div className="card p-4 space-y-3">
@@ -142,6 +181,18 @@ export default function AccountPage() {
         <div>
           <label className="label-text">Bio</label>
           <textarea className="input-field resize-none" rows={3} value={bio} onChange={(e) => setBio(e.target.value)} />
+        </div>
+        <div>
+          <label className="label-text">Timezone</label>
+          <select className="input-field" value={timezone} onChange={(e) => setTimezone(e.target.value)}>
+            {!COMMON_TIMEZONES.includes(timezone) && <option value={timezone}>{timezone}</option>}
+            {COMMON_TIMEZONES.map((tz) => (
+              <option key={tz} value={tz}>
+                {tz.replace(/_/g, " ")}
+              </option>
+            ))}
+          </select>
+          <p className="text-xs text-neutral-500 mt-1">Used for the clock in your sidebar and any scheduled times.</p>
         </div>
         <button onClick={saveProfile} className="btn-primary">
           Save profile

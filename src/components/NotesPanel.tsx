@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { Note } from "@/lib/types";
-import { Lock, Users } from "lucide-react";
+import { Lock, Users, Trash2 } from "lucide-react";
 
 interface Props {
   clientId: string;
@@ -48,6 +48,11 @@ export default function NotesPanel({ clientId, ptId, authorId, canChooseVisibili
     }
   }
 
+  async function deleteNote(id: string) {
+    await supabase.from("notes").delete().eq("id", id);
+    load();
+  }
+
   return (
     <div className="card p-4 flex flex-col h-full">
       <h3 className="font-semibold mb-3">Notes</h3>
@@ -63,11 +68,18 @@ export default function NotesPanel({ clientId, ptId, authorId, canChooseVisibili
                 {n.author?.username || n.author?.full_name || "Someone"} ·{" "}
                 {new Date(n.created_at).toLocaleString()}
               </span>
-              {n.visibility === "pt_only" && (
-                <span className="badge bg-base-700 text-neutral-400 gap-1">
-                  <Lock size={10} /> PT only
-                </span>
-              )}
+              <div className="flex items-center gap-2">
+                {n.visibility === "pt_only" && (
+                  <span className="badge bg-base-700 text-neutral-400 gap-1">
+                    <Lock size={10} /> PT only
+                  </span>
+                )}
+                {n.author_id === authorId && (
+                  <button onClick={() => deleteNote(n.id)} className="text-neutral-600 hover:text-red-400">
+                    <Trash2 size={12} />
+                  </button>
+                )}
+              </div>
             </div>
             <p className="text-neutral-200 whitespace-pre-wrap">{n.content}</p>
           </div>

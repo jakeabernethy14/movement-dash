@@ -19,6 +19,12 @@ A Next.js 14 + Supabase dashboard for a personal training business, styled dark 
 - **PT Admin**: generate registration tokens (auto-assigns the new client to that PT + sets their access duration), manage own client roster.
 - **Owner dashboard**: invite/manage trainer accounts, view **every client across every trainer**, and edit **any** account (name, username, password, access expiration) via a service-role-backed admin API route.
 - **Settings** (owner only): toggle public registration on/off, toggle the "require email verification" preference.
+- **News & Notices**: a shared board on every dashboard — owner/trainers post, everyone sees who posted and when.
+- **Daily Check-ins** (PT): a table of every client's daily logs, mood color-coded, with a detail view.
+- **Sessions & Classes** (PT): one place to log/delete any upcoming session or personal class/call across all clients.
+- **Calendar** (client): a full month view of everything their trainer has programmed.
+- **Messages**: a proper chat tab — PTs get a client list + thread, clients chat directly with their PT, with avatars shown throughout.
+- **Timezone**: each account picks their own timezone (Account page), shown as a live clock in the sidebar.
 
 ## 1. Supabase setup
 
@@ -26,13 +32,15 @@ A Next.js 14 + Supabase dashboard for a personal training business, styled dark 
 2. Go to **SQL Editor → New query**, paste the entire contents of `supabase/schema.sql`, and run it.
 3. Then run `supabase/migration_002.sql` the same way — it adds usernames, account access expiry, PT personal calendar events, session responses, daily logs, profile pictures/bio, and the safer token-validation flow.
    It also creates a public `avatars` Storage bucket with the right policies (skip the `insert into storage.buckets` line and create the bucket manually via **Storage → New bucket** if you'd rather do it through the dashboard — just make sure it's named exactly `avatars` and set to Public).
-4. Go to **Authentication → Sign In / Providers → Email** and decide whether "Confirm email" is on or off
+4. Then run `supabase/migration_003.sql` — adds the news/notice board, per-account timezones, and lets people delete their own notes.
+5. (Optional but recommended) Turn on **Realtime** for the `messages` table so chats update live without a refresh: **Database → Replication** in the Supabase dashboard, find `messages`, and toggle it on. Without this, messages still send/receive fine — the other person just needs to reopen or revisit the Messages page to see new ones instead of seeing them appear instantly.
+6. Go to **Authentication → Sign In / Providers → Email** and decide whether "Confirm email" is on or off
    (the in-app Settings toggle is a preference flag for your own reference — flip the real switch here too).
-5. Grab your **Project URL** and **Publishable key** from **Project Settings → API Keys**
+7. Grab your **Project URL** and **Publishable key** from **Project Settings → API Keys**
    (the newer `sb_publishable_...` key — Supabase's current recommended replacement for the older
    `anon` key; the app also accepts a legacy `anon` key if that's what your project has under
    `NEXT_PUBLIC_SUPABASE_ANON_KEY`).
-6. Also grab your **service_role** key (same page, "Reveal" next to `service_role`) — this is needed
+8. Also grab your **service_role** key (same page, "Reveal" next to `service_role`) — this is needed
    for the admin API route that lets PTs/owners reset a client's password or edit their account.
    **Keep this secret** — it must never be prefixed with `NEXT_PUBLIC_` or shipped to the browser.
 

@@ -94,13 +94,36 @@ export default function LoginPage() {
     <main className="min-h-screen flex items-center justify-center px-4 relative overflow-hidden">
       {/* ambient gold glow */}
       <div
-        className="pointer-events-none absolute -top-1/3 left-1/2 -translate-x-1/2 w-[36rem] h-[36rem] rounded-full blur-3xl"
-        style={{ background: "radial-gradient(circle, rgba(212,175,55,0.10) 0%, rgba(212,175,55,0) 70%)" }}
+        className="pointer-events-none absolute -top-1/3 left-1/2 w-[36rem] h-[36rem] rounded-full blur-3xl"
+        style={{
+          background: "radial-gradient(circle, rgba(212,175,55,0.22) 0%, rgba(212,175,55,0) 70%)",
+          animation: "drift-a 16s ease-in-out infinite",
+        }}
       />
       <div
         className="pointer-events-none absolute bottom-0 right-0 w-[28rem] h-[28rem] rounded-full blur-3xl"
-        style={{ background: "radial-gradient(circle, rgba(212,175,55,0.05) 0%, rgba(212,175,55,0) 70%)" }}
+        style={{
+          background: "radial-gradient(circle, rgba(212,175,55,0.14) 0%, rgba(212,175,55,0) 70%)",
+          animation: "drift-b 20s ease-in-out infinite",
+        }}
       />
+      {/* slow rising gold specks -- subtle, not distracting */}
+      {[...Array(10)].map((_, i) => (
+        <span
+          key={i}
+          className="pointer-events-none absolute rounded-full"
+          style={{
+            left: `${(i * 37) % 100}%`,
+            bottom: "-10px",
+            width: i % 3 === 0 ? 3 : 2,
+            height: i % 3 === 0 ? 3 : 2,
+            background: "rgba(242,201,76,0.7)",
+            boxShadow: "0 0 6px 1px rgba(242,201,76,0.5)",
+            animation: `float-particle ${14 + (i % 5) * 3}s linear infinite`,
+            animationDelay: `${i * 1.7}s`,
+          }}
+        />
+      ))}
 
       <div className="w-full max-w-sm relative">
         <div className="text-center mb-8">

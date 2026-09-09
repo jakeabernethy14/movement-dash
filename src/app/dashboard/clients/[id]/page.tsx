@@ -4,6 +4,7 @@ import { useParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { useSession } from "@/lib/useSession";
 import NotesPanel from "@/components/NotesPanel";
+import Avatar from "@/components/Avatar";
 import { exportGoalsPDF, exportCheckupsPDF } from "@/lib/pdf";
 import { Download, Plus, Trash2 } from "lucide-react";
 
@@ -47,9 +48,36 @@ export default function ClientDetailPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">{client.full_name}</h1>
-        <p className="text-neutral-400 text-sm">{client.email}</p>
+      <div className="flex items-center justify-between flex-wrap gap-4">
+        <div className="flex items-center gap-3">
+          <Avatar url={client.avatar_url} name={client.full_name} size={44} />
+          <div>
+            <h1 className="text-2xl font-bold">{client.full_name}</h1>
+            <p className="text-neutral-400 text-sm">{client.email}</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="badge" style={{ background: "rgba(255,255,255,0.05)", color: "#a3a3a3", borderColor: "transparent" }}>
+            Joined {new Date(client.created_at).toLocaleDateString()}
+          </span>
+          {ptClient?.status && (
+            <span
+              className="badge"
+              style={
+                ptClient.status === "active"
+                  ? { background: "rgba(74,222,128,0.12)", color: "#4ade80", borderColor: "transparent" }
+                  : { background: "rgba(248,113,113,0.12)", color: "#f87171", borderColor: "transparent" }
+              }
+            >
+              {ptClient.status}
+            </span>
+          )}
+          {client.access_expires_at && (
+            <span className="badge badge-gold">
+              Access until {new Date(client.access_expires_at).toLocaleDateString()}
+            </span>
+          )}
+        </div>
       </div>
 
       <div className="flex gap-1 overflow-x-auto border-b border-base-border">
@@ -59,7 +87,7 @@ export default function ClientDetailPage() {
             onClick={() => setTab(t.key)}
             className={`px-4 py-2 text-sm whitespace-nowrap border-b-2 transition-colors ${
               tab === t.key
-                ? "border-gold-500 text-gold-400"
+                ? "border-gold-400 text-gold-300"
                 : "border-transparent text-neutral-400 hover:text-neutral-200"
             }`}
           >
@@ -698,6 +726,8 @@ function DetailsTab({ clientId, ptClient, onSaved, ptId }: { clientId: string; p
   const [accountMsg, setAccountMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
   const [saving, setSaving] = useState(false);
 
+  const [membershipMsg, setMembershipMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
+
   useEffect(() => {
     setDescription(ptClient?.description ?? "");
     setExpiration(ptClient?.expiration ?? "");
@@ -720,13 +750,24 @@ function DetailsTab({ clientId, ptClient, onSaved, ptId }: { clientId: string; p
   }, [clientId]); // eslint-disable-line
 
   async function saveMembership() {
-    const { data } = await supabase
+    setMembershipMsg(null);
+    // upsert (not update) -- if a pt_clients row was ever missing for this client
+    // (e.g. created outside the normal token flow), update() would silently match
+    // zero rows. Upserting on client_id guarantees the row always exists after this.
+    const { data, error } = await supabase
       .from("pt_clients")
-      .update({ description, expiration: expiration || null, status })
-      .eq("client_id", clientId)
+      .upsert(
+        { pt_id: ptId, client_id: clientId, description, expiration: expiration || null, status },
+        { onConflict: "client_id" }
+      )
       .select()
       .single();
+    if (error) {
+      setMembershipMsg({ type: "err", text: error.message });
+      return;
+    }
     onSaved(data);
+    setMembershipMsg({ type: "ok", text: "Saved." });
   }
 
   async function saveAccount() {
@@ -764,6 +805,11 @@ function DetailsTab({ clientId, ptClient, onSaved, ptId }: { clientId: string; p
     <div className="grid md:grid-cols-2 gap-6 max-w-3xl">
       <div className="card p-4 space-y-3">
         <h3 className="font-semibold">Membership details</h3>
+        {membershipMsg && (
+          <p className={`text-sm ${membershipMsg.type === "ok" ? "text-gold-300" : "text-red-400"}`}>
+            {membershipMsg.text}
+          </p>
+        )}
         <div>
           <label className="label-text">Description</label>
           <textarea className="input-field resize-none" rows={3} value={description} onChange={(e) => setDescription(e.target.value)} />

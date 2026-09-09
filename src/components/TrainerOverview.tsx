@@ -5,6 +5,8 @@ import { createClient } from "@/lib/supabase/client";
 import StatCard from "./StatCard";
 import MiniCalendar from "./MiniCalendar";
 import NotesPanel from "./NotesPanel";
+import NoticeBoard from "./NoticeBoard";
+import Avatar from "./Avatar";
 import { format } from "date-fns";
 
 export default function TrainerOverview({ userId }: { userId: string }) {
@@ -16,7 +18,8 @@ export default function TrainerOverview({ userId }: { userId: string }) {
     expiringSoon: 0,
   });
   const [markedDates, setMarkedDates] = useState<string[]>([]);
-  const [todayEvents, setTodayEvents] = useState<any[]>([]);
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const [selectedDayEvents, setSelectedDayEvents] = useState<any[]>([]);
   const [showEventForm, setShowEventForm] = useState(false);
   const [eventForm, setEventForm] = useState({
     title: "",
@@ -27,7 +30,7 @@ export default function TrainerOverview({ userId }: { userId: string }) {
     description: "",
   });
 
-  async function load() {
+  async function loadStats() {
     const { count: clientCount } = await supabase
       .from("pt_clients")
       .select("*", { count: "exact", head: true })
@@ -62,19 +65,28 @@ export default function TrainerOverview({ userId }: { userId: string }) {
       expiringSoon: expiring ?? 0,
     });
     setMarkedDates((upcomingEvents ?? []).map((e) => e.event_date));
+  }
 
-    const { data: today } = await supabase
+  async function loadDay(date: Date) {
+    const iso = format(date, "yyyy-MM-dd");
+    const { data } = await supabase
       .from("schedule_events")
-      .select("*, client:profiles!schedule_events_client_id_fkey(full_name)")
+      .select("*, client:profiles!schedule_events_client_id_fkey(full_name, avatar_url)")
       .eq("pt_id", userId)
-      .eq("event_date", format(new Date(), "yyyy-MM-dd"))
+      .eq("event_date", iso)
       .order("start_time", { ascending: true });
-    setTodayEvents(today ?? []);
+    setSelectedDayEvents(data ?? []);
   }
 
   useEffect(() => {
-    load();
+    loadStats();
+    loadDay(selectedDate);
   }, [userId]); // eslint-disable-line
+
+  function handleSelectDate(date: Date) {
+    setSelectedDate(date);
+    loadDay(date);
+  }
 
   async function addPersonalEvent() {
     if (!eventForm.title.trim()) return;
@@ -91,8 +103,17 @@ export default function TrainerOverview({ userId }: { userId: string }) {
     });
     setEventForm({ ...eventForm, title: "", description: "" });
     setShowEventForm(false);
-    load();
+    loadStats();
+    loadDay(selectedDate);
   }
+
+  async function deleteEvent(id: string) {
+    await supabase.from("schedule_events").delete().eq("id", id);
+    loadDay(selectedDate);
+    loadStats();
+  }
+
+  const isToday = format(selectedDate, "yyyy-MM-dd") === format(new Date(), "yyyy-MM-dd");
 
   return (
     <div className="space-y-6">
@@ -115,12 +136,17 @@ export default function TrainerOverview({ userId }: { userId: string }) {
 
       <div className="grid md:grid-cols-3 gap-6">
         <div className="md:col-span-1 space-y-6">
-          <MiniCalendar markedDates={markedDates} />
+          <MiniCalendar markedDates={markedDates} onSelectDate={handleSelectDate} />
           <div className="card p-4">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="font-semibold">Today's sessions</h3>
+              <h3 className="font-semibold">
+                {isToday ? "Today" : format(selectedDate, "d MMM")}'s sessions
+              </h3>
               <button
-                onClick={() => setShowEventForm(!showEventForm)}
+                onClick={() => {
+                  setEventForm({ ...eventForm, event_date: format(selectedDate, "yyyy-MM-dd") });
+                  setShowEventForm(!showEventForm);
+                }}
                 className="text-gold-400 hover:text-gold-300"
                 title="Add a calendar event"
               >
@@ -129,7 +155,7 @@ export default function TrainerOverview({ userId }: { userId: string }) {
             </div>
 
             {showEventForm && (
-              <div className="bg-base-850 border border-base-border rounded-lg p-3 mb-3 space-y-2">
+              <div className="bg-base-850 border border-white/[0.06] rounded-lg p-3 mb-3 space-y-2">
                 <input
                   className="input-field text-sm"
                   placeholder="Title (e.g. Group class, Coaching call)"
@@ -165,28 +191,33 @@ export default function TrainerOverview({ userId }: { userId: string }) {
               </div>
             )}
 
-            {todayEvents.length === 0 && (
-              <p className="text-sm text-neutral-500">Nothing scheduled today.</p>
+            {selectedDayEvents.length === 0 && (
+              <p className="text-sm text-neutral-500">Nothing scheduled this day.</p>
             )}
             <div className="space-y-2">
-              {todayEvents.map((e) => (
-                <div key={e.id} className="flex justify-between text-sm bg-base-850 rounded-lg p-2 border border-base-border">
-                  <span>
-                    {e.title}
-                    {e.event_scope === "personal" && (
-                      <span className="badge badge-gold ml-2">{e.event_type}</span>
-                    )}
-                    {e.client?.full_name && (
-                      <span className="text-neutral-500"> — {e.client.full_name}</span>
-                    )}
-                  </span>
-                  <span className="text-gold-400">{e.start_time?.slice(0, 5) ?? ""}</span>
+              {selectedDayEvents.map((e) => (
+                <div key={e.id} className="flex items-center justify-between gap-2 text-sm bg-base-850 rounded-lg p-2 border border-white/[0.05]">
+                  <div className="flex items-center gap-2 min-w-0">
+                    {e.client?.full_name && <Avatar url={e.client.avatar_url} name={e.client.full_name} size={20} />}
+                    <span className="truncate">
+                      {e.title}
+                      {e.event_scope === "personal" && <span className="badge badge-gold ml-2">{e.event_type}</span>}
+                      {e.client?.full_name && <span className="text-neutral-500"> — {e.client.full_name}</span>}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-gold-300">{e.start_time?.slice(0, 5) ?? ""}</span>
+                    <button onClick={() => deleteEvent(e.id)} className="text-neutral-600 hover:text-red-400 text-xs">
+                      ✕
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
           </div>
         </div>
-        <div className="md:col-span-2">
+        <div className="md:col-span-2 space-y-6">
+          <NoticeBoard userId={userId} canPost />
           <NotesPanel clientId={userId} ptId={userId} authorId={userId} isSelfNote />
         </div>
       </div>

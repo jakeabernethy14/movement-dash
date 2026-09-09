@@ -1,4 +1,7 @@
 "use client";
+import BackToTop from "@/components/BackToTop";
+import TimezoneClock from "@/components/TimezoneClock";
+import Avatar from "@/components/Avatar";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -14,6 +17,8 @@ import {
   X,
   NotebookPen,
   UserCircle,
+  MessageCircle,
+  ClipboardList,
 } from "lucide-react";
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
@@ -34,9 +39,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   const clientLinks = [
     { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
-    { href: "/dashboard/schedule", label: "Schedule / Program", icon: Calendar },
+    { href: "/dashboard/calendar", label: "Calendar", icon: Calendar },
+    { href: "/dashboard/schedule", label: "Schedule / Program", icon: NotebookPen },
     { href: "/dashboard/dailylog", label: "Daily Log", icon: NotebookPen },
     { href: "/dashboard/goals", label: "Goals", icon: Target },
+    { href: "/dashboard/messages", label: "Messages", icon: MessageCircle },
     { href: "/dashboard/account", label: "Account", icon: UserCircle },
   ];
 
@@ -50,19 +57,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     links = [
       { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
       { href: "/dashboard/clients", label: "Clients", icon: Users },
+      { href: "/dashboard/checkins", label: "Daily Check-ins", icon: ClipboardList },
+      { href: "/dashboard/sessions", label: "Sessions & Classes", icon: Calendar },
       { href: "/dashboard/programs", label: "Training Plans", icon: Dumbbell },
+      { href: "/dashboard/messages", label: "Messages", icon: MessageCircle },
       { href: "/dashboard/admin", label: "PT Admin", icon: ShieldCheck },
       { href: "/dashboard/account", label: "Account", icon: UserCircle },
     ];
   }
   if (session.isOwner) links = [...links, ...ownerLinks];
-
-  const initials = (session.profile?.full_name || session.profile?.email || "?")
-    .split(" ")
-    .map((p) => p[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
 
   return (
     <div className="min-h-screen flex">
@@ -107,11 +110,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           })}
         </nav>
 
-        <div className="p-3 border-t border-base-border">
-          <div className="flex items-center gap-3 px-2 py-2 mb-2">
-            <div className="w-9 h-9 rounded-full bg-gold-500/15 border border-gold-500/30 flex items-center justify-center text-gold-400 text-sm font-semibold">
-              {initials}
-            </div>
+        <div className="p-3 border-t border-base-border space-y-2">
+          <div className="flex items-center gap-3 px-2 py-2">
+            <Avatar url={session.profile?.avatar_url} name={session.profile?.full_name} size={36} />
             <div className="min-w-0">
               <p className="text-sm font-medium truncate">
                 {session.profile?.full_name || "…"}
@@ -120,6 +121,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 {session.roles.join(" · ") || "…"}
               </p>
             </div>
+          </div>
+          <div className="px-2">
+            <TimezoneClock timezone={session.profile?.timezone || "UTC"} />
           </div>
           <button onClick={handleLogout} className="nav-link w-full text-left">
             <LogOut size={18} />
@@ -131,6 +135,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <main className="flex-1 pt-14 md:pt-0 min-h-screen bg-transparent">
         <div className="max-w-screen-2xl mx-auto p-4 md:p-10">{children}</div>
       </main>
+      <BackToTop />
     </div>
   );
 }

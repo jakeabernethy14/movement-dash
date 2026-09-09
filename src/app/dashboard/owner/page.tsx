@@ -2,7 +2,8 @@
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useSession } from "@/lib/useSession";
-import { ShieldCheck, ShieldOff, Plus, X, Pencil } from "lucide-react";
+import { ShieldCheck, ShieldOff, Plus, X, Pencil, Users, UserCog, Ticket, Building2 } from "lucide-react";
+import StatCard from "@/components/StatCard";
 
 export default function OwnerPage() {
   const supabase = createClient();
@@ -11,6 +12,7 @@ export default function OwnerPage() {
   const [tokens, setTokens] = useState<any[]>([]);
   const [allClients, setAllClients] = useState<any[]>([]);
   const [editTarget, setEditTarget] = useState<any | null>(null);
+  const [stats, setStats] = useState({ totalAccounts: 0, totalTrainers: 0, totalClients: 0, activeTokens: 0 });
 
   async function load() {
     const { data: types } = await supabase
@@ -41,6 +43,17 @@ export default function OwnerPage() {
       )
       .order("created_at", { ascending: false });
     setAllClients(clients ?? []);
+
+    const [{ count: totalAccounts }, { count: totalPtRows }] = await Promise.all([
+      supabase.from("profiles").select("*", { count: "exact", head: true }),
+      supabase.from("account_types").select("*", { count: "exact", head: true }).eq("type", "trainer"),
+    ]);
+    setStats({
+      totalAccounts: totalAccounts ?? 0,
+      totalTrainers: totalPtRows ?? 0,
+      totalClients: clients?.length ?? 0,
+      activeTokens: (tok ?? []).filter((t: any) => t.use_count < t.max_uses).length,
+    });
   }
 
   useEffect(() => {
@@ -79,6 +92,13 @@ export default function OwnerPage() {
       <div>
         <h1 className="text-2xl font-bold">Owner Dashboard</h1>
         <p className="text-neutral-400 text-sm">Manage every trainer and client across the studio.</p>
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <StatCard label="Total accounts" value={stats.totalAccounts} icon={Building2} />
+        <StatCard label="Trainers" value={stats.totalTrainers} icon={UserCog} />
+        <StatCard label="Total clients" value={stats.totalClients} icon={Users} />
+        <StatCard label="Active PT invites" value={stats.activeTokens} icon={Ticket} />
       </div>
 
       <div className="card p-4 space-y-3">

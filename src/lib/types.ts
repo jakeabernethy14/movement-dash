@@ -8,6 +8,7 @@ export interface Profile {
   phone: string | null;
   avatar_url: string | null;
   bio: string | null;
+  timezone: string;
   disabled: boolean;
   access_expires_at: string | null;
   created_at: string;
