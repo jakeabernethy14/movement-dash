@@ -25,6 +25,11 @@ A Next.js 14 + Supabase dashboard for a personal training business, styled dark 
 - **Calendar** (client): a full month view of everything their trainer has programmed.
 - **Messages**: a proper chat tab — PTs get a client list + thread, clients chat directly with their PT, with avatars shown throughout.
 - **Timezone**: each account picks their own timezone (Account page), shown as a live clock in the sidebar.
+- **Account expiry lockout**: when a client's access expires they can still sign in, but see a locked screen prompting for a fresh token instead of the dashboard — redeeming a valid token unlocks everything and extends their access by however long that token grants; declining lets them log out.
+- **Public Training Plans**: any trainer can mark a plan "public" when creating it — it then shows up in a shared library every account (owner, trainer, or client) can browse, view, and export to PDF.
+- **Nutrition Plan** (client): a read-only view of the calorie/macro targets and notes their trainer has set.
+- **Sessions & Classes** (PT): manage/delete any upcoming session or personal class across every client from one page.
+- **Owners are always trainers**: a database trigger guarantees that granting the `owner` role also grants `trainer`, so an owner always has full PT capability (and it self-heals for any existing accounts too).
 
 ## 1. Supabase setup
 
@@ -33,14 +38,15 @@ A Next.js 14 + Supabase dashboard for a personal training business, styled dark 
 3. Then run `supabase/migration_002.sql` the same way — it adds usernames, account access expiry, PT personal calendar events, session responses, daily logs, profile pictures/bio, and the safer token-validation flow.
    It also creates a public `avatars` Storage bucket with the right policies (skip the `insert into storage.buckets` line and create the bucket manually via **Storage → New bucket** if you'd rather do it through the dashboard — just make sure it's named exactly `avatars` and set to Public).
 4. Then run `supabase/migration_003.sql` — adds the news/notice board, per-account timezones, and lets people delete their own notes.
-5. (Optional but recommended) Turn on **Realtime** for the `messages` table so chats update live without a refresh: **Database → Replication** in the Supabase dashboard, find `messages`, and toggle it on. Without this, messages still send/receive fine — the other person just needs to reopen or revisit the Messages page to see new ones instead of seeing them appear instantly.
-6. Go to **Authentication → Sign In / Providers → Email** and decide whether "Confirm email" is on or off
+5. Then run `supabase/migration_004.sql` — adds weight tracking on daily logs, the public training plan library, and a safety trigger that guarantees every owner account also has trainer capability.
+6. (Optional but recommended) Turn on **Realtime** for the `messages` table so chats update live without a refresh: **Database → Replication** in the Supabase dashboard, find `messages`, and toggle it on. Without this, messages still send/receive fine — the other person just needs to reopen or revisit the Messages page to see new ones instead of seeing them appear instantly.
+7. Go to **Authentication → Sign In / Providers → Email** and decide whether "Confirm email" is on or off
    (the in-app Settings toggle is a preference flag for your own reference — flip the real switch here too).
-7. Grab your **Project URL** and **Publishable key** from **Project Settings → API Keys**
+8. Grab your **Project URL** and **Publishable key** from **Project Settings → API Keys**
    (the newer `sb_publishable_...` key — Supabase's current recommended replacement for the older
    `anon` key; the app also accepts a legacy `anon` key if that's what your project has under
    `NEXT_PUBLIC_SUPABASE_ANON_KEY`).
-8. Also grab your **service_role** key (same page, "Reveal" next to `service_role`) — this is needed
+9. Also grab your **service_role** key (same page, "Reveal" next to `service_role`) — this is needed
    for the admin API route that lets PTs/owners reset a client's password or edit their account.
    **Keep this secret** — it must never be prefixed with `NEXT_PUBLIC_` or shipped to the browser.
 

@@ -16,9 +16,20 @@ export default function DashboardHome() {
 
   const isStaff = session.isTrainer || session.isOwner;
 
-  return isStaff ? (
-    <TrainerOverview userId={session.userId} />
-  ) : (
-    <ClientOverview userId={session.userId} />
+  return (
+    <div>
+      {session.profile?.access_expires_at && (
+        <div className="flex justify-end mb-4">
+          <span className="badge badge-gold">
+            Membership expires: {new Date(session.profile.access_expires_at).toLocaleDateString()}
+          </span>
+        </div>
+      )}
+      {isStaff ? (
+        <TrainerOverview userId={session.userId} isOwner={session.isOwner} />
+      ) : (
+        <ClientOverview userId={session.userId} />
+      )}
+    </div>
   );
 }

@@ -88,7 +88,10 @@ export default function ProgramsPage() {
             )}
             {plans.map((p) => (
               <tr key={p.id} className="border-t border-base-border hover:bg-base-850/60">
-                <td className="px-4 py-3 font-medium">{p.title}</td>
+                <td className="px-4 py-3 font-medium">
+                  {p.title}
+                  {p.is_public && <span className="badge badge-gold ml-2">Public</span>}
+                </td>
                 <td className="px-4 py-3 text-neutral-400 max-w-xs truncate">{p.description || "—"}</td>
                 <td className="px-4 py-3 text-neutral-400">{p.content?.length ?? 0}</td>
                 <td className="px-4 py-3 text-neutral-500">
@@ -140,6 +143,7 @@ function PlanEditor({
   const [title, setTitle] = useState(plan.title);
   const [description, setDescription] = useState(plan.description);
   const [content, setContent] = useState<TrainingPlanDay[]>(plan.content);
+  const [isPublic, setIsPublic] = useState(plan.is_public ?? false);
 
   function addDay() {
     setContent([...content, { day: `Day ${content.length + 1}`, exercises: [] }]);
@@ -168,10 +172,10 @@ function PlanEditor({
     if (plan.id) {
       await supabase
         .from("training_plans")
-        .update({ title, description, content, updated_at: new Date().toISOString() })
+        .update({ title, description, content, is_public: isPublic, updated_at: new Date().toISOString() })
         .eq("id", plan.id);
     } else {
-      await supabase.from("training_plans").insert({ pt_id: ptId, title, description, content });
+      await supabase.from("training_plans").insert({ pt_id: ptId, title, description, content, is_public: isPublic });
     }
     onSaved();
   }
@@ -204,6 +208,15 @@ function PlanEditor({
           value={description}
           onChange={(e) => setDescription(e.target.value)}
         />
+        <label className="flex items-center gap-2 text-sm text-neutral-300 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={isPublic}
+            onChange={(e) => setIsPublic(e.target.checked)}
+            className="accent-gold-400 w-4 h-4"
+          />
+          Add to Public Training Plans (any client or trainer on the site can view & export this)
+        </label>
       </div>
 
       <div className="space-y-4">

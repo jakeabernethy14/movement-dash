@@ -2,6 +2,8 @@
 import BackToTop from "@/components/BackToTop";
 import TimezoneClock from "@/components/TimezoneClock";
 import Avatar from "@/components/Avatar";
+import LockedAccountScreen from "@/components/LockedAccountScreen";
+import Footer from "@/components/Footer";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -19,8 +21,10 @@ import {
   UserCircle,
   MessageCircle,
   ClipboardList,
+  Salad,
+  Globe,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useSession } from "@/lib/useSession";
 
@@ -30,6 +34,22 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const supabase = createClient();
   const session = useSession();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    if (!session.userId) return;
+    async function loadUnread() {
+      const { count } = await supabase
+        .from("messages")
+        .select("*", { count: "exact", head: true })
+        .eq("recipient_id", session.userId)
+        .eq("read", false);
+      setUnreadCount(count ?? 0);
+    }
+    loadUnread();
+    const id = setInterval(loadUnread, 20000);
+    return () => clearInterval(id);
+  }, [session.userId]); // eslint-disable-line
 
   async function handleLogout() {
     await supabase.auth.signOut();
@@ -42,8 +62,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     { href: "/dashboard/calendar", label: "Calendar", icon: Calendar },
     { href: "/dashboard/schedule", label: "Schedule / Program", icon: NotebookPen },
     { href: "/dashboard/dailylog", label: "Daily Log", icon: NotebookPen },
+    { href: "/dashboard/nutrition", label: "Nutrition Plan", icon: Salad },
     { href: "/dashboard/goals", label: "Goals", icon: Target },
     { href: "/dashboard/messages", label: "Messages", icon: MessageCircle },
+    { href: "/dashboard/public-plans", label: "Public Training Plans", icon: Globe },
     { href: "/dashboard/account", label: "Account", icon: UserCircle },
   ];
 
@@ -60,12 +82,30 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       { href: "/dashboard/checkins", label: "Daily Check-ins", icon: ClipboardList },
       { href: "/dashboard/sessions", label: "Sessions & Classes", icon: Calendar },
       { href: "/dashboard/programs", label: "Training Plans", icon: Dumbbell },
+      { href: "/dashboard/public-plans", label: "Public Training Plans", icon: Globe },
       { href: "/dashboard/messages", label: "Messages", icon: MessageCircle },
       { href: "/dashboard/admin", label: "PT Admin", icon: ShieldCheck },
       { href: "/dashboard/account", label: "Account", icon: UserCircle },
     ];
   }
   if (session.isOwner) links = [...links, ...ownerLinks];
+
+  // Lockout gate: an account whose access has expired can still sign in, but sees
+  // only a renewal screen until they redeem a fresh token (or log out).
+  const isExpired =
+    !session.loading &&
+    session.profile?.access_expires_at &&
+    new Date(session.profile.access_expires_at) < new Date();
+
+  if (isExpired && session.userId && session.profile) {
+    return (
+      <LockedAccountScreen
+        userId={session.userId}
+        fullName={session.profile.full_name}
+        email={session.profile.email}
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen flex">
@@ -81,7 +121,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
       {/* Sidebar */}
       <aside
-        className={`fixed md:static z-30 top-14 md:top-0 bottom-0 w-64 border-r flex flex-col transition-transform md:translate-x-0 ${
+        className={`fixed md:sticky z-30 top-14 md:top-0 bottom-0 md:bottom-auto md:h-screen w-64 border-r flex flex-col transition-transform md:translate-x-0 ${
           mobileOpen ? "translate-x-0" : "-translate-x-full"
         }`}
         style={{ background: "linear-gradient(180deg, #0d0d0d, #070707)", borderColor: "rgba(255,255,255,0.06)" }}
@@ -101,10 +141,20 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 key={link.href}
                 href={link.href}
                 onClick={() => setMobileOpen(false)}
-                className={`nav-link ${active ? "nav-link-active" : ""}`}
+                className={`nav-link ${active ? "nav-link-active" : ""} justify-between`}
               >
-                <Icon size={18} />
-                {link.label}
+                <span className="flex items-center gap-3">
+                  <Icon size={18} />
+                  {link.label}
+                </span>
+                {link.href === "/dashboard/messages" && unreadCount > 0 && (
+                  <span
+                    className="text-[10px] font-semibold rounded-full px-1.5 py-0.5"
+                    style={{ background: "rgba(212,175,55,0.18)", color: "#F2C94C" }}
+                  >
+                    {unreadCount > 9 ? "9+" : unreadCount}
+                  </span>
+                )}
               </Link>
             );
           })}
@@ -132,8 +182,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </div>
       </aside>
 
-      <main className="flex-1 pt-14 md:pt-0 min-h-screen bg-transparent">
-        <div className="max-w-screen-2xl mx-auto p-4 md:p-10">{children}</div>
+      <main className="flex-1 pt-14 md:pt-0 min-h-screen bg-transparent flex flex-col">
+        <div className="max-w-screen-2xl mx-auto p-4 md:p-10 flex-1 w-full">{children}</div>
+        <Footer />
       </main>
       <BackToTop />
     </div>

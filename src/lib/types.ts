@@ -56,6 +56,7 @@ export interface TrainingPlan {
   title: string;
   description: string;
   content: TrainingPlanDay[];
+  is_public: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -94,6 +95,7 @@ export interface DailyLog {
   client_id: string;
   pt_id: string | null;
   log_date: string;
+  weight_kg: number | null;
   calories: number | null;
   protein: number | null;
   carbs: number | null;

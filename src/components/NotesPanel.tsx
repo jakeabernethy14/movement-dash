@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { Note } from "@/lib/types";
 import { Lock, Users, Trash2 } from "lucide-react";
+import Avatar from "./Avatar";
 
 interface Props {
   clientId: string;
@@ -22,7 +23,7 @@ export default function NotesPanel({ clientId, ptId, authorId, canChooseVisibili
   async function load() {
     const { data } = await supabase
       .from("notes")
-      .select("*, author:profiles!notes_author_id_fkey(full_name, username)")
+      .select("*, author:profiles!notes_author_id_fkey(full_name, username, avatar_url)")
       .eq("client_id", clientId)
       .order("created_at", { ascending: false });
     setNotes((data as any) ?? []);
@@ -64,7 +65,8 @@ export default function NotesPanel({ clientId, ptId, authorId, canChooseVisibili
         {notes.map((n) => (
           <div key={n.id} className="bg-base-850 border border-base-border rounded-lg p-3 text-sm">
             <div className="flex items-center justify-between mb-1">
-              <span className="text-xs text-neutral-500">
+              <span className="text-xs text-neutral-500 flex items-center gap-1.5">
+                <Avatar url={n.author?.avatar_url} name={n.author?.full_name} size={16} />
                 {n.author?.username || n.author?.full_name || "Someone"} ·{" "}
                 {new Date(n.created_at).toLocaleString()}
               </span>

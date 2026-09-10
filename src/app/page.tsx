@@ -59,23 +59,17 @@ export default function LoginPage() {
       return;
     }
 
-    // Check disabled / access-expired flags
+    // Check disabled flag (access-expired accounts are allowed to sign in --
+    // the dashboard itself shows a locked screen prompting for a renewal token).
     const { data: profile } = await supabase
       .from("profiles")
-      .select("disabled, access_expires_at")
+      .select("disabled")
       .eq("id", data.user?.id)
       .single();
 
     if (profile?.disabled) {
       await supabase.auth.signOut();
       setError("This account has been disabled. Contact the studio owner.");
-      setLoading(false);
-      return;
-    }
-
-    if (profile?.access_expires_at && new Date(profile.access_expires_at) < new Date()) {
-      await supabase.auth.signOut();
-      setError("Your account access has expired. Contact your trainer to renew it.");
       setLoading(false);
       return;
     }
@@ -195,6 +189,9 @@ export default function LoginPage() {
             </p>
           )}
         </form>
+      </div>
+      <div className="absolute bottom-4 inset-x-0 text-center text-xs text-neutral-600">
+        © {new Date().getFullYear()} The Movement Coaching
       </div>
     </main>
   );

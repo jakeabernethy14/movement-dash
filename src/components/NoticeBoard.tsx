@@ -8,9 +8,11 @@ import { format } from "date-fns";
 export default function NoticeBoard({
   userId,
   canPost,
+  isOwner,
 }: {
   userId: string;
   canPost: boolean;
+  isOwner?: boolean;
 }) {
   const supabase = createClient();
   const [posts, setPosts] = useState<any[]>([]);
@@ -77,7 +79,7 @@ export default function NoticeBoard({
                   {p.author?.username || p.author?.full_name || "Someone"} ·{" "}
                   {format(new Date(p.created_at), "d MMM, HH:mm")}
                 </span>
-                {(p.author_id === userId) && (
+                {(p.author_id === userId || isOwner) && (
                   <button onClick={() => remove(p.id)} className="text-neutral-600 hover:text-red-400">
                     <Trash2 size={12} />
                   </button>

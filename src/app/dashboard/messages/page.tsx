@@ -176,27 +176,32 @@ function ChatThread({ meId, otherId, contacts }: { meId: string; otherId: string
         <Avatar url={other?.avatar_url} name={other?.full_name} size={28} />
         <span className="font-medium text-sm">{other?.full_name}</span>
       </div>
-      <div className="flex-1 overflow-y-auto p-4 space-y-2">
+      <div className="flex-1 overflow-y-auto p-4 space-y-3">
         {messages.length === 0 && <p className="text-sm text-neutral-500">No messages yet — say hi!</p>}
-        {messages.map((m) => (
-          <div key={m.id} className={`flex ${m.sender_id === meId ? "justify-end" : "justify-start"}`}>
-            <div
-              className={`max-w-[70%] px-3 py-2 rounded-lg text-sm ${
-                m.sender_id === meId ? "text-base-950" : "bg-base-850 border border-white/[0.06] text-neutral-100"
-              }`}
-              style={
-                m.sender_id === meId
-                  ? { background: "linear-gradient(135deg, #f2c94c, #d4af37)" }
-                  : undefined
-              }
-            >
-              {m.content}
-              <div className={`text-[10px] mt-1 ${m.sender_id === meId ? "text-base-950/60" : "text-neutral-500"}`}>
-                {format(new Date(m.created_at), "HH:mm")}
+        {messages.map((m) => {
+          const mine = m.sender_id === meId;
+          return (
+            <div key={m.id} className={`flex items-end gap-2 ${mine ? "justify-end" : "justify-start"}`}>
+              {!mine && <Avatar url={other?.avatar_url} name={other?.full_name} size={22} />}
+              <div className="max-w-[70%]">
+                <div className={`text-[10px] text-neutral-500 mb-0.5 ${mine ? "text-right" : ""}`}>
+                  {mine ? "You" : other?.full_name}
+                </div>
+                <div
+                  className={`px-3 py-2 rounded-lg text-sm ${
+                    mine ? "text-base-950" : "bg-base-850 border border-white/[0.06] text-neutral-100"
+                  }`}
+                  style={mine ? { background: "linear-gradient(135deg, #f2c94c, #d4af37)" } : undefined}
+                >
+                  {m.content}
+                  <div className={`text-[10px] mt-1 ${mine ? "text-base-950/60" : "text-neutral-500"}`}>
+                    {format(new Date(m.created_at), "HH:mm")}
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
         <div ref={bottomRef} />
       </div>
       <div className="flex gap-2 p-3 border-t border-white/[0.06]">

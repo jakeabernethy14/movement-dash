@@ -9,7 +9,7 @@ import NoticeBoard from "./NoticeBoard";
 import Avatar from "./Avatar";
 import { format } from "date-fns";
 
-export default function TrainerOverview({ userId }: { userId: string }) {
+export default function TrainerOverview({ userId, isOwner }: { userId: string; isOwner?: boolean }) {
   const supabase = createClient();
   const [stats, setStats] = useState({
     clients: 0,
@@ -217,7 +217,7 @@ export default function TrainerOverview({ userId }: { userId: string }) {
           </div>
         </div>
         <div className="md:col-span-2 space-y-6">
-          <NoticeBoard userId={userId} canPost />
+          <NoticeBoard userId={userId} canPost isOwner={isOwner} />
           <NotesPanel clientId={userId} ptId={userId} authorId={userId} isSelfNote />
         </div>
       </div>

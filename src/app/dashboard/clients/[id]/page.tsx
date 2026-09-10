@@ -124,6 +124,10 @@ function ProgramTab({ clientId, ptId }: { clientId: string; ptId: string }) {
   const [startDate, setStartDate] = useState(new Date().toISOString().slice(0, 10));
   const [endDate, setEndDate] = useState("");
   const [notes, setNotes] = useState("");
+  const [dayDates, setDayDates] = useState<Record<number, string>>({});
+  const [assigning, setAssigning] = useState(false);
+
+  const plan = plans.find((p) => p.id === selectedPlan);
 
   async function load() {
     const { data: p } = await supabase.from("training_plans").select("*").eq("pt_id", ptId);
@@ -140,8 +144,25 @@ function ProgramTab({ clientId, ptId }: { clientId: string; ptId: string }) {
     load();
   }, [clientId]); // eslint-disable-line
 
+  // When a plan is picked, default each of its days to consecutive dates starting today.
+  function handlePlanSelect(planId: string) {
+    setSelectedPlan(planId);
+    const p = plans.find((pl) => pl.id === planId);
+    if (!p) return;
+    const base = new Date(startDate);
+    const defaults: Record<number, string> = {};
+    (p.content ?? []).forEach((_: any, i: number) => {
+      const d = new Date(base);
+      d.setDate(d.getDate() + i);
+      defaults[i] = d.toISOString().slice(0, 10);
+    });
+    setDayDates(defaults);
+  }
+
   async function assign() {
-    if (!selectedPlan) return;
+    if (!selectedPlan || !plan) return;
+    setAssigning(true);
+
     await supabase.from("assigned_programs").insert({
       plan_id: selectedPlan,
       client_id: clientId,
@@ -150,8 +171,36 @@ function ProgramTab({ clientId, ptId }: { clientId: string; ptId: string }) {
       end_date: endDate || null,
       notes,
     });
+
+    // Also place each day of the plan onto the client's calendar on the chosen dates.
+    const events = (plan.content ?? [])
+      .map((day: any, i: number) => {
+        const date = dayDates[i];
+        if (!date) return null;
+        const exerciseSummary = (day.exercises ?? [])
+          .map((ex: any) => `${ex.name} — ${ex.sets}x${ex.reps}${ex.weight ? ` @ ${ex.weight}` : ""}`)
+          .join("\n");
+        return {
+          client_id: clientId,
+          pt_id: ptId,
+          event_scope: "client",
+          title: `${plan.title}: ${day.day}`,
+          description: exerciseSummary,
+          event_date: date,
+          event_type: "training",
+        };
+      })
+      .filter(Boolean);
+
+    if (events.length > 0) {
+      await supabase.from("schedule_events").insert(events);
+    }
+
     setNotes("");
     setEndDate("");
+    setSelectedPlan("");
+    setDayDates({});
+    setAssigning(false);
     load();
   }
 
@@ -159,7 +208,7 @@ function ProgramTab({ clientId, ptId }: { clientId: string; ptId: string }) {
     <div className="grid md:grid-cols-2 gap-6">
       <div className="card p-4 space-y-3">
         <h3 className="font-semibold">Assign a training plan</h3>
-        <select className="input-field" value={selectedPlan} onChange={(e) => setSelectedPlan(e.target.value)}>
+        <select className="input-field" value={selectedPlan} onChange={(e) => handlePlanSelect(e.target.value)}>
           <option value="">Select a plan…</option>
           {plans.map((p) => (
             <option key={p.id} value={p.id}>
@@ -170,13 +219,41 @@ function ProgramTab({ clientId, ptId }: { clientId: string; ptId: string }) {
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="label-text">Start date</label>
-            <input type="date" className="input-field" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+            <input
+              type="date"
+              className="input-field"
+              value={startDate}
+              onChange={(e) => {
+                setStartDate(e.target.value);
+                if (plan) handlePlanSelect(selectedPlan);
+              }}
+            />
           </div>
           <div>
             <label className="label-text">End date (optional)</label>
             <input type="date" className="input-field" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
           </div>
         </div>
+
+        {plan && plan.content?.length > 0 && (
+          <div className="border border-white/[0.06] rounded-lg p-3 space-y-2 bg-base-850/60">
+            <p className="text-xs text-neutral-400 mb-1">
+              Pick which calendar date each day of this plan lands on:
+            </p>
+            {plan.content.map((day: any, i: number) => (
+              <div key={i} className="flex items-center justify-between gap-3">
+                <span className="text-sm">{day.day}</span>
+                <input
+                  type="date"
+                  className="input-field w-auto text-sm py-1"
+                  value={dayDates[i] ?? ""}
+                  onChange={(e) => setDayDates({ ...dayDates, [i]: e.target.value })}
+                />
+              </div>
+            ))}
+          </div>
+        )}
+
         <textarea
           className="input-field resize-none"
           rows={2}
@@ -184,8 +261,8 @@ function ProgramTab({ clientId, ptId }: { clientId: string; ptId: string }) {
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
         />
-        <button onClick={assign} className="btn-primary w-full">
-          Assign plan
+        <button onClick={assign} disabled={!selectedPlan || assigning} className="btn-primary w-full">
+          {assigning ? "Assigning…" : "Assign plan & add to calendar"}
         </button>
         <p className="text-xs text-neutral-500">
           No plans yet? Create one under <span className="text-gold-400">Training Plans</span>.
@@ -699,7 +776,8 @@ function DailyLogTab({ clientId }: { clientId: string }) {
               <span className="font-medium">{l.log_date}</span>
               {l.mood && <span className="badge badge-gold">{l.mood}</span>}
             </div>
-            <div className="grid grid-cols-4 gap-2 text-xs text-neutral-400 mb-2">
+            <div className="grid grid-cols-5 gap-2 text-xs text-neutral-400 mb-2">
+              <span>{l.weight_kg ? `${l.weight_kg}kg` : "—"}</span>
               <span>Cal: {l.calories ?? "—"}</span>
               <span>Protein: {l.protein ?? "—"}g</span>
               <span>Carbs: {l.carbs ?? "—"}g</span>

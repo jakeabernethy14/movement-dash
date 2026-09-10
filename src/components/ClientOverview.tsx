@@ -5,6 +5,7 @@ import { format } from "date-fns";
 import { Target, MessageCircle, CalendarDays, Dumbbell } from "lucide-react";
 import Link from "next/link";
 import NoticeBoard from "./NoticeBoard";
+import Avatar from "./Avatar";
 
 export default function ClientOverview({ userId }: { userId: string }) {
   const supabase = createClient();
@@ -57,7 +58,7 @@ export default function ClientOverview({ userId }: { userId: string }) {
 
       const { data: notes } = await supabase
         .from("notes")
-        .select("*, author:profiles!notes_author_id_fkey(full_name, username)")
+        .select("*, author:profiles!notes_author_id_fkey(full_name, username, avatar_url)")
         .eq("client_id", userId)
         .eq("visibility", "shared")
         .order("created_at", { ascending: false })
@@ -184,10 +185,13 @@ export default function ClientOverview({ userId }: { userId: string }) {
             {ptNotes.map((n) => (
               <div key={n.id} className="bg-base-850 border border-white/[0.05] rounded-lg p-2 text-sm">
                 <p className="text-neutral-200">{n.content}</p>
-                <span className="text-xs text-neutral-500">
-                  {n.author?.username || n.author?.full_name || "Your PT"} ·{" "}
-                  {format(new Date(n.created_at), "d MMM, HH:mm")}
-                </span>
+                <div className="flex items-center gap-1.5 mt-1">
+                  <Avatar url={n.author?.avatar_url} name={n.author?.full_name} size={16} />
+                  <span className="text-xs text-neutral-500">
+                    {n.author?.username || n.author?.full_name || "Your PT"} ·{" "}
+                    {format(new Date(n.created_at), "d MMM, HH:mm")}
+                  </span>
+                </div>
               </div>
             ))}
           </div>

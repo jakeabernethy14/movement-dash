@@ -105,7 +105,7 @@ export default function RegisterPage() {
 
   if (checkedSettings && !registrationOpen) {
     return (
-      <main className="min-h-screen flex items-center justify-center px-4">
+      <main className="min-h-screen flex items-center justify-center px-4 relative">
         <div className="card p-8 max-w-sm text-center">
           <h1 className="text-lg font-semibold mb-2">Registration closed</h1>
           <p className="text-neutral-400 text-sm mb-4">
@@ -115,12 +115,15 @@ export default function RegisterPage() {
             Back to sign in
           </Link>
         </div>
+        <div className="absolute bottom-4 inset-x-0 text-center text-xs text-neutral-600">
+          © {new Date().getFullYear()} The Movement Coaching
+        </div>
       </main>
     );
   }
 
   return (
-    <main className="min-h-screen flex items-center justify-center px-4">
+    <main className="min-h-screen flex items-center justify-center px-4 relative">
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
           <h1 className="text-2xl font-bold tracking-tight">
@@ -206,6 +209,9 @@ export default function RegisterPage() {
             </p>
           </form>
         )}
+      </div>
+      <div className="absolute bottom-4 inset-x-0 text-center text-xs text-neutral-600">
+        © {new Date().getFullYear()} The Movement Coaching
       </div>
     </main>
   );
