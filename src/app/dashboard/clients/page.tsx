@@ -9,9 +9,8 @@ import { format, subDays } from "date-fns";
 interface Row {
   id: string;
   description: string;
-  expiration: string | null;
   status: string;
-  client: { id: string; full_name: string; email: string } | null;
+  client: { id: string; full_name: string; email: string; access_expires_at: string | null } | null;
 }
 
 export default function ClientsPage() {
@@ -29,7 +28,7 @@ export default function ClientsPage() {
       // Owners can see every client across every trainer on the dedicated Owner page.
       const { data } = await supabase
         .from("pt_clients")
-        .select("id, description, expiration, status, client:profiles!pt_clients_client_id_fkey(id, full_name, email)")
+        .select("id, description, status, client:profiles!pt_clients_client_id_fkey(id, full_name, email, access_expires_at)")
         .eq("pt_id", session.userId)
         .order("created_at", { ascending: false });
       const list = (data as any) ?? [];
@@ -76,18 +75,39 @@ export default function ClientsPage() {
     );
   });
 
+  function isExpired(exp: string | null) {
+    return !!exp && new Date(exp) < new Date();
+  }
+
   function expirationBadge(exp: string | null) {
-    if (!exp) return <span className="text-neutral-500 text-sm">—</span>;
-    const daysLeft = Math.ceil((new Date(exp).getTime() - Date.now()) / 86400000);
-    const style =
-      daysLeft < 0
-        ? { background: "rgba(248,113,113,0.12)", color: "#f87171" }
-        : daysLeft <= 7
-        ? { background: "rgba(212,175,55,0.14)", color: "#F2C94C" }
-        : { background: "rgba(255,255,255,0.05)", color: "#a3a3a3" };
+    if (!exp) return <span className="text-neutral-500 text-sm">No expiry</span>;
+    const expired = isExpired(exp);
     return (
-      <span className="badge" style={{ ...style, borderColor: "transparent" }}>
+      <span
+        className="badge"
+        style={{
+          background: expired ? "rgba(248,113,113,0.12)" : "rgba(74,222,128,0.12)",
+          color: expired ? "#f87171" : "#4ade80",
+          borderColor: "transparent",
+        }}
+      >
         {new Date(exp).toLocaleDateString()}
+      </span>
+    );
+  }
+
+  function statusBadge(row: Row) {
+    const expired = isExpired(row.client?.access_expires_at ?? null);
+    const status = expired ? "expired" : row.status;
+    const style =
+      status === "expired"
+        ? { background: "rgba(248,113,113,0.12)", color: "#f87171" }
+        : status === "paused"
+        ? { background: "rgba(251,191,36,0.12)", color: "#fbbf24" }
+        : { background: "rgba(74,222,128,0.12)", color: "#4ade80" };
+    return (
+      <span className="badge capitalize" style={{ ...style, borderColor: "transparent" }}>
+        {status}
       </span>
     );
   }
@@ -117,6 +137,7 @@ export default function ClientsPage() {
               <th className="px-4 py-3 font-medium">Client name</th>
               <th className="px-4 py-3 font-medium">Email</th>
               <th className="px-4 py-3 font-medium">Description</th>
+              <th className="px-4 py-3 font-medium">Status</th>
               <th className="px-4 py-3 font-medium">Expiration</th>
               <th className="px-4 py-3 font-medium">Activity</th>
               <th className="px-4 py-3 font-medium"></th>
@@ -125,14 +146,14 @@ export default function ClientsPage() {
           <tbody>
             {loading && (
               <tr>
-                <td className="px-4 py-6 text-neutral-500" colSpan={6}>
+                <td className="px-4 py-6 text-neutral-500" colSpan={7}>
                   Loading…
                 </td>
               </tr>
             )}
             {!loading && filtered.length === 0 && (
               <tr>
-                <td className="px-4 py-6 text-neutral-500" colSpan={6}>
+                <td className="px-4 py-6 text-neutral-500" colSpan={7}>
                   No clients found. Generate a registration token in PT Admin to invite one.
                 </td>
               </tr>
@@ -146,7 +167,8 @@ export default function ClientsPage() {
                   <td className="px-4 py-3 text-neutral-400 max-w-xs truncate">
                     {r.description || "—"}
                   </td>
-                  <td className="px-4 py-3">{expirationBadge(r.expiration)}</td>
+                  <td className="px-4 py-3">{statusBadge(r)}</td>
+                  <td className="px-4 py-3">{expirationBadge(r.client?.access_expires_at ?? null)}</td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-1.5">
                       {act?.newMessage && (

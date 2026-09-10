@@ -23,6 +23,7 @@ import {
   ClipboardList,
   Salad,
   Globe,
+  Trophy,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
@@ -48,7 +49,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     }
     loadUnread();
     const id = setInterval(loadUnread, 20000);
-    return () => clearInterval(id);
+    window.addEventListener("tmc:messages-read", loadUnread);
+    return () => {
+      clearInterval(id);
+      window.removeEventListener("tmc:messages-read", loadUnread);
+    };
   }, [session.userId]); // eslint-disable-line
 
   async function handleLogout() {
@@ -63,6 +68,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     { href: "/dashboard/schedule", label: "Schedule / Program", icon: NotebookPen },
     { href: "/dashboard/dailylog", label: "Daily Log", icon: NotebookPen },
     { href: "/dashboard/nutrition", label: "Nutrition Plan", icon: Salad },
+    { href: "/dashboard/pbs", label: "PBs", icon: Trophy },
     { href: "/dashboard/goals", label: "Goals", icon: Target },
     { href: "/dashboard/messages", label: "Messages", icon: MessageCircle },
     { href: "/dashboard/public-plans", label: "Public Training Plans", icon: Globe },
@@ -80,6 +86,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
       { href: "/dashboard/clients", label: "Clients", icon: Users },
       { href: "/dashboard/checkins", label: "Daily Check-ins", icon: ClipboardList },
+      { href: "/dashboard/pbs/pt", label: "PBs", icon: Trophy },
       { href: "/dashboard/sessions", label: "Sessions & Classes", icon: Calendar },
       { href: "/dashboard/programs", label: "Training Plans", icon: Dumbbell },
       { href: "/dashboard/public-plans", label: "Public Training Plans", icon: Globe },
@@ -119,66 +126,70 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </button>
       </div>
 
-      {/* Sidebar */}
+      {/* Sidebar -- outer element just carries the background and stretches to match
+          the full page height (flex default align-items:stretch); the inner wrapper
+          is what actually stays pinned to the viewport while scrolling. */}
       <aside
-        className={`fixed md:sticky z-30 top-14 md:top-0 bottom-0 md:bottom-auto md:h-screen w-64 border-r flex flex-col transition-transform md:translate-x-0 ${
+        className={`fixed md:relative z-30 top-14 md:top-0 bottom-0 md:bottom-auto w-64 border-r transition-transform md:translate-x-0 ${
           mobileOpen ? "translate-x-0" : "-translate-x-full"
         }`}
         style={{ background: "linear-gradient(180deg, #0d0d0d, #070707)", borderColor: "rgba(255,255,255,0.06)" }}
       >
-        <div className="hidden md:block p-5 border-b border-base-border">
-          <span className="font-bold text-lg">
-            The <span className="text-gold-400">Movement</span> Coaching
-          </span>
-        </div>
+        <div className="h-full md:sticky md:top-0 md:h-screen flex flex-col">
+          <div className="hidden md:block p-5 border-b border-base-border">
+            <span className="font-bold text-lg">
+              The <span className="text-gold-400">Movement</span> Coaching
+            </span>
+          </div>
 
-        <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
-          {links.map((link) => {
-            const Icon = link.icon;
-            const active = pathname === link.href;
-            return (
-              <Link
-                key={link.href}
-                href={link.href}
-                onClick={() => setMobileOpen(false)}
-                className={`nav-link ${active ? "nav-link-active" : ""} justify-between`}
-              >
-                <span className="flex items-center gap-3">
-                  <Icon size={18} />
-                  {link.label}
-                </span>
-                {link.href === "/dashboard/messages" && unreadCount > 0 && (
-                  <span
-                    className="text-[10px] font-semibold rounded-full px-1.5 py-0.5"
-                    style={{ background: "rgba(212,175,55,0.18)", color: "#F2C94C" }}
-                  >
-                    {unreadCount > 9 ? "9+" : unreadCount}
+          <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
+            {links.map((link) => {
+              const Icon = link.icon;
+              const active = pathname === link.href;
+              return (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  onClick={() => setMobileOpen(false)}
+                  className={`nav-link ${active ? "nav-link-active" : ""} justify-between`}
+                >
+                  <span className="flex items-center gap-3">
+                    <Icon size={18} />
+                    {link.label}
                   </span>
-                )}
-              </Link>
-            );
-          })}
-        </nav>
+                  {link.href === "/dashboard/messages" && unreadCount > 0 && (
+                    <span
+                      className="text-[10px] font-semibold rounded-full px-1.5 py-0.5"
+                      style={{ background: "rgba(212,175,55,0.18)", color: "#F2C94C" }}
+                    >
+                      {unreadCount > 9 ? "9+" : unreadCount}
+                    </span>
+                  )}
+                </Link>
+              );
+            })}
+          </nav>
 
-        <div className="p-3 border-t border-base-border space-y-2">
-          <div className="flex items-center gap-3 px-2 py-2">
-            <Avatar url={session.profile?.avatar_url} name={session.profile?.full_name} size={36} />
-            <div className="min-w-0">
-              <p className="text-sm font-medium truncate">
-                {session.profile?.full_name || "…"}
-              </p>
-              <p className="text-xs text-neutral-500 truncate">
-                {session.roles.join(" · ") || "…"}
-              </p>
+          <div className="p-3 border-t border-base-border space-y-2">
+            <div className="flex items-center gap-3 px-2 py-2">
+              <Avatar url={session.profile?.avatar_url} name={session.profile?.full_name} size={36} />
+              <div className="min-w-0">
+                <p className="text-sm font-medium truncate">
+                  {session.profile?.full_name || "…"}
+                </p>
+                <p className="text-xs text-neutral-500 truncate">
+                  {session.roles.join(" · ") || "…"}
+                </p>
+              </div>
             </div>
+            <div className="px-2">
+              <TimezoneClock timezone={session.profile?.timezone || "UTC"} />
+            </div>
+            <button onClick={handleLogout} className="nav-link w-full text-left">
+              <LogOut size={18} />
+              Sign out
+            </button>
           </div>
-          <div className="px-2">
-            <TimezoneClock timezone={session.profile?.timezone || "UTC"} />
-          </div>
-          <button onClick={handleLogout} className="nav-link w-full text-left">
-            <LogOut size={18} />
-            Sign out
-          </button>
         </div>
       </aside>
 

@@ -6,9 +6,9 @@ import { useSession } from "@/lib/useSession";
 import NotesPanel from "@/components/NotesPanel";
 import Avatar from "@/components/Avatar";
 import { exportGoalsPDF, exportCheckupsPDF } from "@/lib/pdf";
-import { Download, Plus, Trash2 } from "lucide-react";
+import { Download, Plus, Trash2, Pencil } from "lucide-react";
 
-type Tab = "program" | "sessions" | "dailylog" | "nutrition" | "checkups" | "goals" | "notes" | "messages" | "details";
+type Tab = "program" | "sessions" | "dailylog" | "nutrition" | "checkups" | "goals" | "notes" | "details";
 
 export default function ClientDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -42,7 +42,6 @@ export default function ClientDetailPage() {
     { key: "checkups", label: "Check-ups" },
     { key: "goals", label: "Goals" },
     { key: "notes", label: "Notes" },
-    { key: "messages", label: "Messages" },
     { key: "details", label: "Details" },
   ];
 
@@ -107,7 +106,7 @@ export default function ClientDetailPage() {
       {tab === "notes" && (
         <NotesPanel clientId={id} ptId={session.userId} authorId={session.userId} canChooseVisibility />
       )}
-      {tab === "messages" && <MessagesTab clientId={id} ptId={session.userId} />}
+      {/* Messaging now lives in the global Messages tab in the sidebar */}
       {tab === "details" && (
         <DetailsTab clientId={id} ptClient={ptClient} onSaved={setPtClient} ptId={session.userId} />
       )}
@@ -121,17 +120,25 @@ function ProgramTab({ clientId, ptId }: { clientId: string; ptId: string }) {
   const [plans, setPlans] = useState<any[]>([]);
   const [assigned, setAssigned] = useState<any[]>([]);
   const [selectedPlan, setSelectedPlan] = useState("");
-  const [startDate, setStartDate] = useState(new Date().toISOString().slice(0, 10));
-  const [endDate, setEndDate] = useState("");
+  const [mode, setMode] = useState<"single" | "repeat">("single");
+  const [selectedDayIndex, setSelectedDayIndex] = useState(0);
+  const [selectedDate, setSelectedDate] = useState<string>("");
+  const [repeatStart, setRepeatStart] = useState(new Date().toISOString().slice(0, 10));
+  const [repeatEnd, setRepeatEnd] = useState("");
   const [notes, setNotes] = useState("");
-  const [dayDates, setDayDates] = useState<Record<number, string>>({});
   const [assigning, setAssigning] = useState(false);
+  const [monthCursor, setMonthCursor] = useState(new Date());
+  const [monthEvents, setMonthEvents] = useState<any[]>([]);
+  const [editingAssignment, setEditingAssignment] = useState<any | null>(null);
 
   const plan = plans.find((p) => p.id === selectedPlan);
 
-  async function load() {
+  async function loadPlans() {
     const { data: p } = await supabase.from("training_plans").select("*").eq("pt_id", ptId);
     setPlans(p ?? []);
+  }
+
+  async function loadAssigned() {
     const { data: a } = await supabase
       .from("assigned_programs")
       .select("*, plan:training_plans(title)")
@@ -140,148 +147,341 @@ function ProgramTab({ clientId, ptId }: { clientId: string; ptId: string }) {
     setAssigned(a ?? []);
   }
 
-  useEffect(() => {
-    load();
-  }, [clientId]); // eslint-disable-line
-
-  // When a plan is picked, default each of its days to consecutive dates starting today.
-  function handlePlanSelect(planId: string) {
-    setSelectedPlan(planId);
-    const p = plans.find((pl) => pl.id === planId);
-    if (!p) return;
-    const base = new Date(startDate);
-    const defaults: Record<number, string> = {};
-    (p.content ?? []).forEach((_: any, i: number) => {
-      const d = new Date(base);
-      d.setDate(d.getDate() + i);
-      defaults[i] = d.toISOString().slice(0, 10);
-    });
-    setDayDates(defaults);
+  async function loadMonthEvents() {
+    const start = new Date(monthCursor.getFullYear(), monthCursor.getMonth(), 1).toISOString().slice(0, 10);
+    const end = new Date(monthCursor.getFullYear(), monthCursor.getMonth() + 1, 0).toISOString().slice(0, 10);
+    const { data } = await supabase
+      .from("schedule_events")
+      .select("*")
+      .eq("client_id", clientId)
+      .gte("event_date", start)
+      .lte("event_date", end);
+    setMonthEvents(data ?? []);
   }
 
-  async function assign() {
-    if (!selectedPlan || !plan) return;
-    setAssigning(true);
+  useEffect(() => {
+    loadPlans();
+    loadAssigned();
+  }, [clientId]); // eslint-disable-line
 
-    await supabase.from("assigned_programs").insert({
-      plan_id: selectedPlan,
+  useEffect(() => {
+    loadMonthEvents();
+  }, [clientId, monthCursor]); // eslint-disable-line
+
+  function dayName(y: number, m: number, d: number) {
+    return new Date(y, m, d).toISOString().slice(0, 10);
+  }
+
+  const eventsByDate: Record<string, any[]> = {};
+  monthEvents.forEach((e) => {
+    eventsByDate[e.event_date] = eventsByDate[e.event_date] || [];
+    eventsByDate[e.event_date].push(e);
+  });
+
+  async function assignSingleDay() {
+    if (!plan || !selectedDate) return;
+    setAssigning(true);
+    const day = plan.content?.[selectedDayIndex];
+    const exerciseSummary = (day?.exercises ?? [])
+      .map((ex: any) => `${ex.name} — ${ex.sets}x${ex.reps}${ex.weight ? ` @ ${ex.weight}` : ""}`)
+      .join("\n");
+
+    const { data: assignment } = await supabase
+      .from("assigned_programs")
+      .insert({
+        plan_id: plan.id,
+        client_id: clientId,
+        assigned_by: ptId,
+        start_date: selectedDate,
+        end_date: selectedDate,
+        notes: notes || `${plan.title}: ${day?.day ?? ""}`,
+      })
+      .select()
+      .single();
+
+    await supabase.from("schedule_events").insert({
       client_id: clientId,
-      assigned_by: ptId,
-      start_date: startDate,
-      end_date: endDate || null,
-      notes,
+      pt_id: ptId,
+      event_scope: "client",
+      title: `${plan.title}: ${day?.day ?? "Session"}`,
+      description: exerciseSummary,
+      event_date: selectedDate,
+      event_type: "training",
+      assigned_program_id: assignment?.id ?? null,
     });
 
-    // Also place each day of the plan onto the client's calendar on the chosen dates.
-    const events = (plan.content ?? [])
-      .map((day: any, i: number) => {
-        const date = dayDates[i];
-        if (!date) return null;
-        const exerciseSummary = (day.exercises ?? [])
-          .map((ex: any) => `${ex.name} — ${ex.sets}x${ex.reps}${ex.weight ? ` @ ${ex.weight}` : ""}`)
-          .join("\n");
-        return {
-          client_id: clientId,
-          pt_id: ptId,
-          event_scope: "client",
-          title: `${plan.title}: ${day.day}`,
-          description: exerciseSummary,
-          event_date: date,
-          event_type: "training",
-        };
+    setNotes("");
+    setSelectedDate("");
+    setAssigning(false);
+    loadAssigned();
+    loadMonthEvents();
+  }
+
+  async function assignRepeatRange() {
+    if (!plan || !repeatStart || !repeatEnd || !plan.content?.length) return;
+    setAssigning(true);
+
+    const { data: assignment } = await supabase
+      .from("assigned_programs")
+      .insert({
+        plan_id: plan.id,
+        client_id: clientId,
+        assigned_by: ptId,
+        start_date: repeatStart,
+        end_date: repeatEnd,
+        notes: notes || `${plan.title} (repeating)`,
       })
-      .filter(Boolean);
+      .select()
+      .single();
+
+    const start = new Date(repeatStart);
+    const end = new Date(repeatEnd);
+    const events: any[] = [];
+    let i = 0;
+    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1), i++) {
+      const day = plan.content[i % plan.content.length];
+      const exerciseSummary = (day.exercises ?? [])
+        .map((ex: any) => `${ex.name} — ${ex.sets}x${ex.reps}${ex.weight ? ` @ ${ex.weight}` : ""}`)
+        .join("\n");
+      events.push({
+        client_id: clientId,
+        pt_id: ptId,
+        event_scope: "client",
+        title: `${plan.title}: ${day.day}`,
+        description: exerciseSummary,
+        event_date: d.toISOString().slice(0, 10),
+        event_type: "training",
+        assigned_program_id: assignment?.id ?? null,
+      });
+    }
 
     if (events.length > 0) {
       await supabase.from("schedule_events").insert(events);
     }
 
     setNotes("");
-    setEndDate("");
-    setSelectedPlan("");
-    setDayDates({});
+    setRepeatEnd("");
     setAssigning(false);
-    load();
+    loadAssigned();
+    loadMonthEvents();
   }
 
-  return (
-    <div className="grid md:grid-cols-2 gap-6">
-      <div className="card p-4 space-y-3">
-        <h3 className="font-semibold">Assign a training plan</h3>
-        <select className="input-field" value={selectedPlan} onChange={(e) => handlePlanSelect(e.target.value)}>
-          <option value="">Select a plan…</option>
-          {plans.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.title}
-            </option>
-          ))}
-        </select>
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="label-text">Start date</label>
-            <input
-              type="date"
-              className="input-field"
-              value={startDate}
-              onChange={(e) => {
-                setStartDate(e.target.value);
-                if (plan) handlePlanSelect(selectedPlan);
-              }}
-            />
-          </div>
-          <div>
-            <label className="label-text">End date (optional)</label>
-            <input type="date" className="input-field" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
-          </div>
-        </div>
+  async function deleteAssignment(id: string) {
+    if (!confirm("Delete this assignment? Any calendar sessions it created will be removed too.")) return;
+    await supabase.from("assigned_programs").delete().eq("id", id);
+    loadAssigned();
+    loadMonthEvents();
+  }
 
-        {plan && plan.content?.length > 0 && (
-          <div className="border border-white/[0.06] rounded-lg p-3 space-y-2 bg-base-850/60">
-            <p className="text-xs text-neutral-400 mb-1">
-              Pick which calendar date each day of this plan lands on:
-            </p>
-            {plan.content.map((day: any, i: number) => (
-              <div key={i} className="flex items-center justify-between gap-3">
-                <span className="text-sm">{day.day}</span>
-                <input
-                  type="date"
-                  className="input-field w-auto text-sm py-1"
-                  value={dayDates[i] ?? ""}
-                  onChange={(e) => setDayDates({ ...dayDates, [i]: e.target.value })}
+  async function saveAssignmentNotes() {
+    if (!editingAssignment) return;
+    await supabase
+      .from("assigned_programs")
+      .update({ notes: editingAssignment.notes })
+      .eq("id", editingAssignment.id);
+    setEditingAssignment(null);
+    loadAssigned();
+  }
+
+  const monthLabel = monthCursor.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+  const y = monthCursor.getFullYear();
+  const m = monthCursor.getMonth();
+  const firstOfMonth = new Date(y, m, 1);
+  const daysInMonth = new Date(y, m + 1, 0).getDate();
+  const leadingBlanks = (firstOfMonth.getDay() + 6) % 7; // Monday-first
+
+  return (
+    <div className="space-y-6">
+      <div className="grid lg:grid-cols-[1fr_1.2fr] gap-6">
+        {/* LEFT: plan + assignment controls */}
+        <div className="card p-4 space-y-3">
+          <h3 className="font-semibold">Assign a training plan</h3>
+          <select className="input-field" value={selectedPlan} onChange={(e) => { setSelectedPlan(e.target.value); setSelectedDayIndex(0); }}>
+            <option value="">Select a plan…</option>
+            {plans.map((p) => (
+              <option key={p.id} value={p.id}>{p.title}</option>
+            ))}
+          </select>
+
+          {plan && (
+            <>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setMode("single")}
+                  className="badge cursor-pointer"
+                  style={mode === "single" ? { background: "rgba(212,175,55,0.14)", color: "#F2C94C", borderColor: "transparent" } : { background: "rgba(255,255,255,0.05)", color: "#a3a3a3", borderColor: "transparent" }}
+                >
+                  Pick a date on the calendar
+                </button>
+                <button
+                  onClick={() => setMode("repeat")}
+                  className="badge cursor-pointer"
+                  style={mode === "repeat" ? { background: "rgba(212,175,55,0.14)", color: "#F2C94C", borderColor: "transparent" } : { background: "rgba(255,255,255,0.05)", color: "#a3a3a3", borderColor: "transparent" }}
+                >
+                  Repeat over a date range
+                </button>
+              </div>
+
+              {mode === "single" && (
+                <div className="space-y-2 border border-white/[0.06] rounded-lg p-3 bg-base-850/60">
+                  <label className="label-text">Which day of the plan?</label>
+                  <select className="input-field" value={selectedDayIndex} onChange={(e) => setSelectedDayIndex(Number(e.target.value))}>
+                    {(plan.content ?? []).map((day: any, i: number) => (
+                      <option key={i} value={i}>{day.day}</option>
+                    ))}
+                  </select>
+                  <p className="text-sm text-neutral-400">
+                    {selectedDate ? (
+                      <>Selected date: <span className="text-gold-300">{selectedDate}</span></>
+                    ) : (
+                      "Click a date on the calendar on the right →"
+                    )}
+                  </p>
+                  <button
+                    onClick={assignSingleDay}
+                    disabled={!selectedDate || assigning}
+                    className="btn-primary w-full"
+                  >
+                    {assigning ? "Assigning…" : "Assign this day to the selected date"}
+                  </button>
+                </div>
+              )}
+
+              {mode === "repeat" && (
+                <div className="space-y-2 border border-white/[0.06] rounded-lg p-3 bg-base-850/60">
+                  <p className="text-xs text-neutral-400">
+                    The plan's {plan.content?.length ?? 0} day(s) will cycle repeatedly across every day in this range
+                    (e.g. a 3-day plan over 30 days repeats ~10 times).
+                  </p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="label-text">From</label>
+                      <input type="date" className="input-field" value={repeatStart} onChange={(e) => setRepeatStart(e.target.value)} />
+                    </div>
+                    <div>
+                      <label className="label-text">To</label>
+                      <input type="date" className="input-field" value={repeatEnd} onChange={(e) => setRepeatEnd(e.target.value)} />
+                    </div>
+                  </div>
+                  <button
+                    onClick={assignRepeatRange}
+                    disabled={!repeatEnd || assigning}
+                    className="btn-primary w-full"
+                  >
+                    {assigning ? "Assigning…" : "Assign & repeat across range"}
+                  </button>
+                </div>
+              )}
+
+              <div>
+                <label className="label-text">Notes (optional)</label>
+                <textarea
+                  className="input-field resize-none"
+                  rows={2}
+                  placeholder="Notes for this assignment…"
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
                 />
               </div>
-            ))}
-          </div>
-        )}
+            </>
+          )}
+          {!plan && (
+            <p className="text-xs text-neutral-500">
+              No plans yet? Create one under <span className="text-gold-400">Training Plans</span>.
+            </p>
+          )}
+        </div>
 
-        <textarea
-          className="input-field resize-none"
-          rows={2}
-          placeholder="Notes for this assignment…"
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-        />
-        <button onClick={assign} disabled={!selectedPlan || assigning} className="btn-primary w-full">
-          {assigning ? "Assigning…" : "Assign plan & add to calendar"}
-        </button>
-        <p className="text-xs text-neutral-500">
-          No plans yet? Create one under <span className="text-gold-400">Training Plans</span>.
-        </p>
+        {/* RIGHT: client's calendar */}
+        <div className="card p-4">
+          <div className="flex items-center justify-between mb-3">
+            <button
+              onClick={() => setMonthCursor(new Date(y, m - 1, 1))}
+              className="p-1.5 rounded hover:bg-white/5 text-neutral-400"
+            >
+              ‹
+            </button>
+            <span className="font-medium text-sm">{monthLabel}</span>
+            <button
+              onClick={() => setMonthCursor(new Date(y, m + 1, 1))}
+              className="p-1.5 rounded hover:bg-white/5 text-neutral-400"
+            >
+              ›
+            </button>
+          </div>
+          <div className="grid grid-cols-7 gap-1 text-center text-[10px] text-neutral-500 mb-1">
+            {["M", "T", "W", "T", "F", "S", "S"].map((d, i) => <span key={i}>{d}</span>)}
+          </div>
+          <div className="grid grid-cols-7 gap-1">
+            {Array.from({ length: leadingBlanks }).map((_, i) => <span key={"b" + i} />)}
+            {Array.from({ length: daysInMonth }).map((_, i) => {
+              const dateStr = dayName(y, m, i + 1);
+              const hasEvents = eventsByDate[dateStr]?.length > 0;
+              const isSelected = mode === "single" && selectedDate === dateStr;
+              return (
+                <button
+                  key={dateStr}
+                  onClick={() => mode === "single" && plan && setSelectedDate(dateStr)}
+                  disabled={mode !== "single" || !plan}
+                  className="relative text-xs h-10 rounded-lg flex items-center justify-center transition-colors"
+                  style={{
+                    background: isSelected ? "rgba(212,175,55,0.18)" : "rgba(255,255,255,0.02)",
+                    border: isSelected ? "1px solid rgba(212,175,55,0.5)" : "1px solid transparent",
+                    color: mode !== "single" || !plan ? "#525252" : "#d4d4d4",
+                    cursor: mode === "single" && plan ? "pointer" : "default",
+                  }}
+                >
+                  {i + 1}
+                  {hasEvents && <span className="absolute bottom-1 w-1 h-1 rounded-full bg-gold-400" />}
+                </button>
+              );
+            })}
+          </div>
+          <p className="text-xs text-neutral-500 mt-3">
+            Gold dots = days that already have something scheduled.
+            {mode === "single" ? " Click an empty date to place the selected plan day there." : ""}
+          </p>
+        </div>
       </div>
+
       <div className="card p-4">
         <h3 className="font-semibold mb-3">Assignment history</h3>
         <div className="space-y-2">
           {assigned.length === 0 && <p className="text-sm text-neutral-500">Nothing assigned yet.</p>}
           {assigned.map((a) => (
             <div key={a.id} className="bg-base-850 border border-base-border rounded-lg p-3 text-sm">
-              <div className="flex justify-between">
-                <span className="font-medium">{a.plan?.title ?? "Removed plan"}</span>
-                <span className="text-neutral-500">
-                  {a.start_date}
-                  {a.end_date ? ` → ${a.end_date}` : ""}
-                </span>
-              </div>
-              {a.notes && <p className="text-neutral-400 mt-1">{a.notes}</p>}
+              {editingAssignment?.id === a.id ? (
+                <div className="space-y-2">
+                  <textarea
+                    className="input-field resize-none"
+                    rows={2}
+                    value={editingAssignment.notes ?? ""}
+                    onChange={(e) => setEditingAssignment({ ...editingAssignment, notes: e.target.value })}
+                  />
+                  <div className="flex gap-2">
+                    <button onClick={saveAssignmentNotes} className="btn-primary text-xs px-3 py-1">Save</button>
+                    <button onClick={() => setEditingAssignment(null)} className="btn-secondary text-xs px-3 py-1">Cancel</button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="flex justify-between items-start gap-2">
+                    <span className="font-medium">{a.plan?.title ?? "Removed plan"}</span>
+                    <div className="flex items-center gap-3 shrink-0">
+                      <span className="text-neutral-500 text-xs">
+                        {a.start_date}{a.end_date && a.end_date !== a.start_date ? ` → ${a.end_date}` : ""}
+                      </span>
+                      <button onClick={() => setEditingAssignment(a)} className="text-neutral-500 hover:text-gold-300">
+                        <Pencil size={13} />
+                      </button>
+                      <button onClick={() => deleteAssignment(a.id)} className="text-neutral-500 hover:text-red-400">
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  </div>
+                  {a.notes && <p className="text-neutral-400 mt-1">{a.notes}</p>}
+                </>
+              )}
             </div>
           ))}
         </div>
@@ -289,6 +489,7 @@ function ProgramTab({ clientId, ptId }: { clientId: string; ptId: string }) {
     </div>
   );
 }
+
 
 // ---------------- Nutrition tab ----------------
 function NutritionTab({ clientId, ptId }: { clientId: string; ptId: string }) {
@@ -300,70 +501,124 @@ function NutritionTab({ clientId, ptId }: { clientId: string; ptId: string }) {
     fats_target: "",
     notes: "",
   });
-  const [saved, setSaved] = useState(false);
+  const [saved, setSaved] = useState<{ type: "ok" | "err"; text: string } | null>(null);
+  const [savedPlan, setSavedPlan] = useState<any>(null);
+
+  async function load() {
+    const { data } = await supabase.from("nutrition_info").select("*").eq("client_id", clientId).maybeSingle();
+    if (data) {
+      setForm({
+        calories_target: data.calories_target?.toString() ?? "",
+        protein_target: data.protein_target?.toString() ?? "",
+        carbs_target: data.carbs_target?.toString() ?? "",
+        fats_target: data.fats_target?.toString() ?? "",
+        notes: data.notes ?? "",
+      });
+      setSavedPlan(data);
+    }
+  }
 
   useEffect(() => {
-    async function load() {
-      const { data } = await supabase.from("nutrition_info").select("*").eq("client_id", clientId).maybeSingle();
-      if (data) {
-        setForm({
-          calories_target: data.calories_target?.toString() ?? "",
-          protein_target: data.protein_target?.toString() ?? "",
-          carbs_target: data.carbs_target?.toString() ?? "",
-          fats_target: data.fats_target?.toString() ?? "",
-          notes: data.notes ?? "",
-        });
-      }
-    }
     load();
   }, [clientId]); // eslint-disable-line
 
   async function save() {
-    await supabase.from("nutrition_info").upsert(
-      {
-        client_id: clientId,
-        pt_id: ptId,
-        calories_target: Number(form.calories_target) || null,
-        protein_target: Number(form.protein_target) || null,
-        carbs_target: Number(form.carbs_target) || null,
-        fats_target: Number(form.fats_target) || null,
-        notes: form.notes,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "client_id" }
-    );
-    setSaved(true);
-    setTimeout(() => setSaved(false), 1500);
+    setSaved(null);
+    const { data, error } = await supabase
+      .from("nutrition_info")
+      .upsert(
+        {
+          client_id: clientId,
+          pt_id: ptId,
+          calories_target: Number(form.calories_target) || null,
+          protein_target: Number(form.protein_target) || null,
+          carbs_target: Number(form.carbs_target) || null,
+          fats_target: Number(form.fats_target) || null,
+          notes: form.notes,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "client_id" }
+      )
+      .select()
+      .single();
+    if (error) {
+      setSaved({ type: "err", text: error.message });
+      return;
+    }
+    setSavedPlan(data);
+    setSaved({ type: "ok", text: "Saved — this now shows on the client's Nutrition Plan tab." });
   }
 
   return (
-    <div className="card p-4 max-w-lg space-y-3">
-      <h3 className="font-semibold">Nutrition targets</h3>
-      <div className="grid grid-cols-2 gap-3">
-        {(["calories_target", "protein_target", "carbs_target", "fats_target"] as const).map((k) => (
-          <div key={k}>
-            <label className="label-text">{k.replace("_target", "").toUpperCase()}</label>
-            <input
-              type="number"
-              className="input-field"
-              value={(form as any)[k]}
-              onChange={(e) => setForm({ ...form, [k]: e.target.value })}
-            />
+    <div className="grid md:grid-cols-2 gap-6">
+      <div className="card p-4 space-y-3">
+        <h3 className="font-semibold">Nutrition targets</h3>
+        {saved && (
+          <p className={`text-sm ${saved.type === "ok" ? "text-gold-300" : "text-red-400"}`}>{saved.text}</p>
+        )}
+        <div className="grid grid-cols-2 gap-3">
+          {(["calories_target", "protein_target", "carbs_target", "fats_target"] as const).map((k) => (
+            <div key={k}>
+              <label className="label-text">{k.replace("_target", "").toUpperCase()}</label>
+              <input
+                type="number"
+                className="input-field"
+                value={(form as any)[k]}
+                onChange={(e) => setForm({ ...form, [k]: e.target.value })}
+              />
+            </div>
+          ))}
+        </div>
+        <div>
+          <label className="label-text">Notes</label>
+          <textarea
+            className="input-field resize-none"
+            rows={4}
+            value={form.notes}
+            onChange={(e) => setForm({ ...form, notes: e.target.value })}
+          />
+        </div>
+        <button onClick={save} className="btn-primary">
+          Save nutrition info
+        </button>
+      </div>
+
+      <div className="card p-4">
+        <h3 className="font-semibold mb-3">What the client currently sees</h3>
+        {!savedPlan ? (
+          <p className="text-sm text-neutral-500">Nothing saved yet.</p>
+        ) : (
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="bg-base-850 border border-white/[0.06] rounded-lg p-3">
+                <p className="text-xs text-neutral-500">Calories</p>
+                <p className="text-lg font-semibold">{savedPlan.calories_target ?? "—"}</p>
+              </div>
+              <div className="bg-base-850 border border-white/[0.06] rounded-lg p-3">
+                <p className="text-xs text-neutral-500">Protein</p>
+                <p className="text-lg font-semibold">{savedPlan.protein_target ?? "—"}g</p>
+              </div>
+              <div className="bg-base-850 border border-white/[0.06] rounded-lg p-3">
+                <p className="text-xs text-neutral-500">Carbs</p>
+                <p className="text-lg font-semibold">{savedPlan.carbs_target ?? "—"}g</p>
+              </div>
+              <div className="bg-base-850 border border-white/[0.06] rounded-lg p-3">
+                <p className="text-xs text-neutral-500">Fats</p>
+                <p className="text-lg font-semibold">{savedPlan.fats_target ?? "—"}g</p>
+              </div>
+            </div>
+            {savedPlan.notes && (
+              <div>
+                <p className="text-xs text-neutral-500 mb-1">Notes</p>
+                <p className="text-sm text-neutral-300 whitespace-pre-wrap">{savedPlan.notes}</p>
+              </div>
+            )}
+            <p className="text-xs text-neutral-600">
+              Last updated {new Date(savedPlan.updated_at).toLocaleString()}
+            </p>
           </div>
-        ))}
+        )}
       </div>
-      <div>
-        <label className="label-text">Notes</label>
-        <textarea
-          className="input-field resize-none"
-          rows={4}
-          value={form.notes}
-          onChange={(e) => setForm({ ...form, notes: e.target.value })}
-        />
-      </div>
-      <button onClick={save} className="btn-primary">
-        {saved ? "Saved ✓" : "Save nutrition info"}
-      </button>
     </div>
   );
 }
@@ -373,6 +628,7 @@ function CheckupsTab({ clientId, ptId, clientName }: { clientId: string; ptId: s
   const supabase = createClient();
   const [checkups, setCheckups] = useState<any[]>([]);
   const [form, setForm] = useState({ weight_kg: "", body_fat_pct: "", notes: "" });
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   async function load() {
     const { data } = await supabase
@@ -388,21 +644,54 @@ function CheckupsTab({ clientId, ptId, clientName }: { clientId: string; ptId: s
   }, [clientId]); // eslint-disable-line
 
   async function addCheckup() {
-    await supabase.from("checkups").insert({
-      client_id: clientId,
-      pt_id: ptId,
-      weight_kg: Number(form.weight_kg) || null,
-      body_fat_pct: Number(form.body_fat_pct) || null,
-      notes: form.notes,
-    });
+    if (editingId) {
+      await supabase
+        .from("checkups")
+        .update({
+          weight_kg: Number(form.weight_kg) || null,
+          body_fat_pct: Number(form.body_fat_pct) || null,
+          notes: form.notes,
+        })
+        .eq("id", editingId);
+      setEditingId(null);
+    } else {
+      await supabase.from("checkups").insert({
+        client_id: clientId,
+        pt_id: ptId,
+        weight_kg: Number(form.weight_kg) || null,
+        body_fat_pct: Number(form.body_fat_pct) || null,
+        notes: form.notes,
+      });
+    }
     setForm({ weight_kg: "", body_fat_pct: "", notes: "" });
+    load();
+  }
+
+  function startEdit(c: any) {
+    setEditingId(c.id);
+    setForm({
+      weight_kg: c.weight_kg?.toString() ?? "",
+      body_fat_pct: c.body_fat_pct?.toString() ?? "",
+      notes: c.notes ?? "",
+    });
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+    setForm({ weight_kg: "", body_fat_pct: "", notes: "" });
+  }
+
+  async function deleteCheckup(id: string) {
+    if (!confirm("Delete this check-up entry?")) return;
+    await supabase.from("checkups").delete().eq("id", id);
+    if (editingId === id) cancelEdit();
     load();
   }
 
   return (
     <div className="grid md:grid-cols-2 gap-6">
       <div className="card p-4 space-y-3">
-        <h3 className="font-semibold">Log a check-up</h3>
+        <h3 className="font-semibold">{editingId ? "Edit check-up" : "Log a check-up"}</h3>
         <div className="grid grid-cols-2 gap-3">
           <input
             className="input-field"
@@ -424,9 +713,16 @@ function CheckupsTab({ clientId, ptId, clientName }: { clientId: string; ptId: s
           value={form.notes}
           onChange={(e) => setForm({ ...form, notes: e.target.value })}
         />
-        <button onClick={addCheckup} className="btn-primary w-full flex items-center justify-center gap-2">
-          <Plus size={16} /> Add check-up
-        </button>
+        <div className="flex gap-2">
+          <button onClick={addCheckup} className="btn-primary flex-1 flex items-center justify-center gap-2">
+            <Plus size={16} /> {editingId ? "Save changes" : "Add check-up"}
+          </button>
+          {editingId && (
+            <button onClick={cancelEdit} className="btn-secondary">
+              Cancel
+            </button>
+          )}
+        </div>
       </div>
       <div className="card p-4">
         <div className="flex items-center justify-between mb-3">
@@ -442,11 +738,19 @@ function CheckupsTab({ clientId, ptId, clientName }: { clientId: string; ptId: s
           {checkups.length === 0 && <p className="text-sm text-neutral-500">No check-ups logged yet.</p>}
           {checkups.map((c) => (
             <div key={c.id} className="bg-base-850 border border-base-border rounded-lg p-3 text-sm">
-              <div className="flex justify-between">
+              <div className="flex justify-between items-start">
                 <span className="font-medium">{c.checkup_date}</span>
-                <span className="text-neutral-400">
-                  {c.weight_kg ? `${c.weight_kg}kg` : ""} {c.body_fat_pct ? `· ${c.body_fat_pct}%` : ""}
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="text-neutral-400">
+                    {c.weight_kg ? `${c.weight_kg}kg` : ""} {c.body_fat_pct ? `· ${c.body_fat_pct}%` : ""}
+                  </span>
+                  <button onClick={() => startEdit(c)} className="text-neutral-500 hover:text-gold-300">
+                    <Pencil size={13} />
+                  </button>
+                  <button onClick={() => deleteCheckup(c.id)} className="text-neutral-500 hover:text-red-400">
+                    <Trash2 size={13} />
+                  </button>
+                </div>
               </div>
               {c.notes && <p className="text-neutral-400 mt-1">{c.notes}</p>}
             </div>
@@ -546,66 +850,6 @@ function GoalsTab({ clientId, ptId, clientName }: { clientId: string; ptId: stri
             </div>
           ))}
         </div>
-      </div>
-    </div>
-  );
-}
-
-// ---------------- Messages tab ----------------
-function MessagesTab({ clientId, ptId }: { clientId: string; ptId: string }) {
-  const supabase = createClient();
-  const [messages, setMessages] = useState<any[]>([]);
-  const [content, setContent] = useState("");
-
-  async function load() {
-    const { data } = await supabase
-      .from("messages")
-      .select("*")
-      .or(
-        `and(sender_id.eq.${ptId},recipient_id.eq.${clientId}),and(sender_id.eq.${clientId},recipient_id.eq.${ptId})`
-      )
-      .order("created_at", { ascending: true });
-    setMessages(data ?? []);
-  }
-
-  useEffect(() => {
-    load();
-  }, [clientId]); // eslint-disable-line
-
-  async function send() {
-    if (!content.trim()) return;
-    await supabase.from("messages").insert({ sender_id: ptId, recipient_id: clientId, content });
-    setContent("");
-    load();
-  }
-
-  return (
-    <div className="card p-4 max-w-xl">
-      <h3 className="font-semibold mb-3">Message thread</h3>
-      <div className="space-y-2 max-h-80 overflow-y-auto mb-3">
-        {messages.map((m) => (
-          <div
-            key={m.id}
-            className={`max-w-[75%] px-3 py-2 rounded-lg text-sm ${
-              m.sender_id === ptId ? "ml-auto bg-gold-500/15 text-gold-100" : "bg-base-850 border border-base-border"
-            }`}
-          >
-            {m.content}
-          </div>
-        ))}
-        {messages.length === 0 && <p className="text-sm text-neutral-500">No messages yet.</p>}
-      </div>
-      <div className="flex gap-2">
-        <input
-          className="input-field"
-          placeholder="Type a message…"
-          value={content}
-          onChange={(e) => setContent(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && send()}
-        />
-        <button onClick={send} className="btn-primary">
-          Send
-        </button>
       </div>
     </div>
   );
@@ -795,7 +1039,6 @@ function DailyLogTab({ clientId }: { clientId: string }) {
 function DetailsTab({ clientId, ptClient, onSaved, ptId }: { clientId: string; ptClient: any; onSaved: (v: any) => void; ptId: string }) {
   const supabase = createClient();
   const [description, setDescription] = useState(ptClient?.description ?? "");
-  const [expiration, setExpiration] = useState(ptClient?.expiration ?? "");
   const [status, setStatus] = useState(ptClient?.status ?? "active");
   const [fullName, setFullName] = useState("");
   const [username, setUsername] = useState("");
@@ -808,7 +1051,6 @@ function DetailsTab({ clientId, ptClient, onSaved, ptId }: { clientId: string; p
 
   useEffect(() => {
     setDescription(ptClient?.description ?? "");
-    setExpiration(ptClient?.expiration ?? "");
     setStatus(ptClient?.status ?? "active");
   }, [ptClient]);
 
@@ -827,6 +1069,9 @@ function DetailsTab({ clientId, ptClient, onSaved, ptId }: { clientId: string; p
       });
   }, [clientId]); // eslint-disable-line
 
+  const isExpired = accessExpiresAt ? new Date(accessExpiresAt) < new Date() : false;
+  const effectiveStatus = isExpired ? "expired" : status;
+
   async function saveMembership() {
     setMembershipMsg(null);
     // upsert (not update) -- if a pt_clients row was ever missing for this client
@@ -835,7 +1080,7 @@ function DetailsTab({ clientId, ptClient, onSaved, ptId }: { clientId: string; p
     const { data, error } = await supabase
       .from("pt_clients")
       .upsert(
-        { pt_id: ptId, client_id: clientId, description, expiration: expiration || null, status },
+        { pt_id: ptId, client_id: clientId, description, status },
         { onConflict: "client_id" }
       )
       .select()
@@ -893,16 +1138,23 @@ function DetailsTab({ clientId, ptClient, onSaved, ptId }: { clientId: string; p
           <textarea className="input-field resize-none" rows={3} value={description} onChange={(e) => setDescription(e.target.value)} />
         </div>
         <div>
-          <label className="label-text">Membership expiration (display only)</label>
-          <input type="date" className="input-field" value={expiration ?? ""} onChange={(e) => setExpiration(e.target.value)} />
-        </div>
-        <div>
           <label className="label-text">Status</label>
-          <select className="input-field" value={status} onChange={(e) => setStatus(e.target.value)}>
+          <select
+            className="input-field"
+            value={effectiveStatus === "expired" ? "expired" : status}
+            onChange={(e) => setStatus(e.target.value)}
+            disabled={isExpired}
+          >
             <option value="active">Active</option>
             <option value="paused">Paused</option>
             <option value="expired">Expired</option>
           </select>
+          {isExpired && (
+            <p className="text-xs text-red-400 mt-1">
+              Status is automatically "Expired" because their access date has passed — extend it in
+              the Account access box to change this.
+            </p>
+          )}
         </div>
         <button onClick={saveMembership} className="btn-primary">
           Save

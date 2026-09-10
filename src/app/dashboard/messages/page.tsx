@@ -127,13 +127,17 @@ function ChatThread({ meId, otherId, contacts }: { meId: string; otherId: string
       )
       .order("created_at", { ascending: true });
     setMessages(data ?? []);
-    // mark incoming as read
-    await supabase
+    // mark incoming as read, then let the sidebar know so its badge updates immediately
+    const { data: justRead } = await supabase
       .from("messages")
       .update({ read: true })
       .eq("sender_id", otherId)
       .eq("recipient_id", meId)
-      .eq("read", false);
+      .eq("read", false)
+      .select("id");
+    if (justRead && justRead.length > 0) {
+      window.dispatchEvent(new Event("tmc:messages-read"));
+    }
   }
 
   useEffect(() => {

@@ -5,6 +5,7 @@ import { useSession } from "@/lib/useSession";
 import { format, startOfMonth, endOfMonth } from "date-fns";
 import { Download } from "lucide-react";
 import { exportSchedulePDF } from "@/lib/pdf";
+import Avatar from "@/components/Avatar";
 
 export default function SchedulePage() {
   const supabase = createClient();
@@ -20,7 +21,7 @@ export default function SchedulePage() {
       const end = format(endOfMonth(selectedDate), "yyyy-MM-dd");
       const { data } = await supabase
         .from("schedule_events")
-        .select("*")
+        .select("*, pt:profiles!schedule_events_pt_id_fkey(full_name, avatar_url)")
         .eq("client_id", session.userId)
         .gte("event_date", start)
         .lte("event_date", end)
@@ -64,7 +65,7 @@ export default function SchedulePage() {
               <SessionCard key={e.id} event={e} onUpdated={() => {
                 supabase
                   .from("schedule_events")
-                  .select("*")
+                  .select("*, pt:profiles!schedule_events_pt_id_fkey(full_name, avatar_url)")
                   .eq("client_id", session.userId)
                   .eq("event_date", format(selectedDate, "yyyy-MM-dd"))
                   .then(({ data }) => setEvents(data ?? []));
@@ -108,6 +109,12 @@ function SessionCard({ event, onUpdated }: { event: any; onUpdated: () => void }
         <p className="text-xs text-neutral-500 mt-1">
           {event.start_time?.slice(0, 5)} {event.end_time ? `– ${event.end_time.slice(0, 5)}` : ""}
         </p>
+      )}
+      {event.pt?.full_name && (
+        <div className="flex items-center gap-1.5 mt-2">
+          <Avatar url={event.pt.avatar_url} name={event.pt.full_name} size={16} />
+          <span className="text-xs text-neutral-500">Set by {event.pt.full_name}</span>
+        </div>
       )}
       {event.description && <p className="text-sm text-neutral-300 mt-2">{event.description}</p>}
 

@@ -17,6 +17,8 @@ export default function CheckinsPage() {
   const supabase = createClient();
   const session = useSession();
   const [logs, setLogs] = useState<any[]>([]);
+  const [clients, setClients] = useState<any[]>([]);
+  const [selectedClient, setSelectedClient] = useState("all");
   const [viewing, setViewing] = useState<any | null>(null);
 
   useEffect(() => {
@@ -28,7 +30,15 @@ export default function CheckinsPage() {
       .order("log_date", { ascending: false })
       .limit(150)
       .then(({ data }) => setLogs(data ?? []));
+
+    supabase
+      .from("pt_clients")
+      .select("client:profiles!pt_clients_client_id_fkey(id, full_name)")
+      .eq("pt_id", session.userId)
+      .then(({ data }) => setClients((data ?? []).map((r: any) => r.client).filter(Boolean)));
   }, [session.userId]); // eslint-disable-line
+
+  const visibleLogs = selectedClient === "all" ? logs : logs.filter((l) => l.client_id === selectedClient);
 
   // Compute weight trend per row by comparing to that same client's next-most-recent log.
   const byClient: Record<string, any[]> = {};
@@ -48,9 +58,19 @@ export default function CheckinsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Daily Check-ins</h1>
-        <p className="text-neutral-400 text-sm">Every daily log from all of your clients, most recent first.</p>
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="text-2xl font-bold">Daily Check-ins</h1>
+          <p className="text-neutral-400 text-sm">Every daily log from all of your clients, most recent first.</p>
+        </div>
+        <select className="input-field w-56" value={selectedClient} onChange={(e) => setSelectedClient(e.target.value)}>
+          <option value="all">All clients</option>
+          {clients.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.full_name}
+            </option>
+          ))}
+        </select>
       </div>
 
       <div className="card overflow-hidden">
@@ -67,14 +87,14 @@ export default function CheckinsPage() {
             </tr>
           </thead>
           <tbody>
-            {logs.length === 0 && (
+            {visibleLogs.length === 0 && (
               <tr>
                 <td colSpan={7} className="px-4 py-6 text-neutral-500">
                   No check-ins logged yet.
                 </td>
               </tr>
             )}
-            {logs.map((l) => {
+            {visibleLogs.map((l) => {
               const mood = MOOD_STYLE[l.mood] ?? { bg: "rgba(255,255,255,0.04)", text: "#a3a3a3" };
               const trend = trendFor(l);
               return (

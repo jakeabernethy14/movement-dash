@@ -15,6 +15,7 @@ import {
   subMonths,
 } from "date-fns";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import Avatar from "@/components/Avatar";
 
 const TYPE_COLOR: Record<string, string> = {
   training: "#D4AF37",
@@ -39,7 +40,7 @@ export default function ClientCalendarPage() {
     const end = format(endOfMonth(cursor), "yyyy-MM-dd");
     supabase
       .from("schedule_events")
-      .select("*")
+      .select("*, pt:profiles!schedule_events_pt_id_fkey(full_name, avatar_url)")
       .eq("client_id", session.userId)
       .gte("event_date", start)
       .lte("event_date", end)
@@ -148,6 +149,12 @@ export default function ClientCalendarPage() {
                   <p className="text-xs text-neutral-500 mt-1">
                     {e.start_time?.slice(0, 5)} {e.end_time ? `– ${e.end_time.slice(0, 5)}` : ""}
                   </p>
+                )}
+                {e.pt?.full_name && (
+                  <div className="flex items-center gap-1.5 mt-2">
+                    <Avatar url={e.pt.avatar_url} name={e.pt.full_name} size={16} />
+                    <span className="text-xs text-neutral-500">Set by {e.pt.full_name}</span>
+                  </div>
                 )}
                 {e.description && <p className="text-neutral-300 mt-2">{e.description}</p>}
                 {e.client_response && (
