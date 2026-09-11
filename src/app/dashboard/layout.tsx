@@ -115,8 +115,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }
 
   return (
-    <div className="min-h-screen flex">
-      {/* Mobile top bar */}
+    <div className="min-h-screen">
+      {/* Mobile top bar -- fixed */}
       <div className="md:hidden fixed top-0 inset-x-0 h-14 border-b flex items-center justify-between px-4 z-40" style={{background: "linear-gradient(180deg, #0d0d0d, #090909)", borderColor: "rgba(255,255,255,0.06)"}}>
         <span className="font-bold">
           The <span className="text-gold-400">Movement</span> Coaching
@@ -126,77 +126,79 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </button>
       </div>
 
-      {/* Sidebar -- outer element just carries the background and stretches to match
-          the full page height (flex default align-items:stretch); the inner wrapper
-          is what actually stays pinned to the viewport while scrolling. */}
+      {/* Sidebar -- always fixed to the viewport, on both mobile and desktop, so it
+          never moves as the page scrolls and never leaves a background gap. */}
       <aside
-        className={`fixed md:relative z-30 top-14 md:top-0 bottom-0 md:bottom-auto w-64 border-r transition-transform md:translate-x-0 ${
+        className={`fixed z-30 top-14 md:top-0 bottom-0 w-64 border-r flex flex-col transition-transform md:translate-x-0 ${
           mobileOpen ? "translate-x-0" : "-translate-x-full"
         }`}
         style={{ background: "linear-gradient(180deg, #0d0d0d, #070707)", borderColor: "rgba(255,255,255,0.06)" }}
       >
-        <div className="h-full md:sticky md:top-0 md:h-screen flex flex-col">
-          <div className="hidden md:block p-5 border-b border-base-border">
-            <span className="font-bold text-lg">
-              The <span className="text-gold-400">Movement</span> Coaching
-            </span>
-          </div>
+        <div className="hidden md:block p-5 border-b border-base-border">
+          <span className="font-bold text-lg">
+            The <span className="text-gold-400">Movement</span> Coaching
+          </span>
+        </div>
 
-          <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
-            {links.map((link) => {
-              const Icon = link.icon;
-              const active = pathname === link.href;
-              return (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  onClick={() => setMobileOpen(false)}
-                  className={`nav-link ${active ? "nav-link-active" : ""} justify-between`}
-                >
-                  <span className="flex items-center gap-3">
-                    <Icon size={18} />
-                    {link.label}
+        <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
+          {links.map((link) => {
+            const Icon = link.icon;
+            const active = pathname === link.href;
+            return (
+              <Link
+                key={link.href}
+                href={link.href}
+                onClick={() => setMobileOpen(false)}
+                className={`nav-link ${active ? "nav-link-active" : ""} justify-between`}
+              >
+                <span className="flex items-center gap-3">
+                  <Icon size={18} />
+                  {link.label}
+                </span>
+                {link.href === "/dashboard/messages" && unreadCount > 0 && (
+                  <span
+                    className="text-[10px] font-semibold rounded-full px-1.5 py-0.5"
+                    style={{ background: "rgba(212,175,55,0.18)", color: "#F2C94C" }}
+                  >
+                    {unreadCount > 9 ? "9+" : unreadCount}
                   </span>
-                  {link.href === "/dashboard/messages" && unreadCount > 0 && (
-                    <span
-                      className="text-[10px] font-semibold rounded-full px-1.5 py-0.5"
-                      style={{ background: "rgba(212,175,55,0.18)", color: "#F2C94C" }}
-                    >
-                      {unreadCount > 9 ? "9+" : unreadCount}
-                    </span>
-                  )}
-                </Link>
-              );
-            })}
-          </nav>
+                )}
+              </Link>
+            );
+          })}
+        </nav>
 
-          <div className="p-3 border-t border-base-border space-y-2">
-            <div className="flex items-center gap-3 px-2 py-2">
-              <Avatar url={session.profile?.avatar_url} name={session.profile?.full_name} size={36} />
-              <div className="min-w-0">
-                <p className="text-sm font-medium truncate">
-                  {session.profile?.full_name || "…"}
-                </p>
-                <p className="text-xs text-neutral-500 truncate">
-                  {session.roles.join(" · ") || "…"}
-                </p>
-              </div>
+        <div className="p-3 border-t border-base-border space-y-2">
+          <div className="flex items-center gap-3 px-2 py-2">
+            <Avatar url={session.profile?.avatar_url} name={session.profile?.full_name} size={36} />
+            <div className="min-w-0">
+              <p className="text-sm font-medium truncate">
+                {session.profile?.full_name || "…"}
+              </p>
+              <p className="text-xs text-neutral-500 truncate">
+                {session.roles.join(" · ") || "…"}
+              </p>
             </div>
-            <div className="px-2">
-              <TimezoneClock timezone={session.profile?.timezone || "UTC"} />
-            </div>
-            <button onClick={handleLogout} className="nav-link w-full text-left">
-              <LogOut size={18} />
-              Sign out
-            </button>
           </div>
+          <div className="px-2">
+            <TimezoneClock timezone={session.profile?.timezone || "UTC"} />
+          </div>
+          <button onClick={handleLogout} className="nav-link w-full text-left">
+            <LogOut size={18} />
+            Sign out
+          </button>
         </div>
       </aside>
 
-      <main className="flex-1 pt-14 md:pt-0 flex flex-col">
-        <div className="max-w-screen-2xl mx-auto p-4 md:p-10 w-full">{children}</div>
-        <Footer />
+      {/* Main content -- offset past the fixed sidebar, with bottom padding that
+          reserves room for the fixed footer (this is also the gap you asked for
+          between the last card and the footer). */}
+      <main className="md:ml-64 pt-14 md:pt-0 pb-24">
+        <div className="max-w-screen-2xl mx-auto p-4 md:p-10">{children}</div>
       </main>
+
+      {/* Footer -- always pinned to the very bottom of the viewport */}
+      <Footer />
       <BackToTop />
     </div>
   );
