@@ -1,13 +1,10 @@
 export default function Footer() {
   return (
     <footer
-      className="fixed bottom-0 left-0 md:left-64 right-0 z-20 text-center text-xs text-neutral-500 py-3 border-t"
-      style={{
-        background: "linear-gradient(180deg, #0d0d0d, #070707)",
-        borderColor: "rgba(255,255,255,0.06)",
-      }}
+      className="fixed bottom-0 left-0 md:left-[17.5rem] right-0 z-20 flex items-center justify-between px-5 md:px-10 text-[11px] text-[#739084] py-3 border-t border-white/[0.08] bg-[#0a1714]/90 backdrop-blur-xl"
     >
-      © {new Date().getFullYear()} The Movement Coaching
+      <span>© {new Date().getFullYear()} The Movement Coaching</span>
+      <span className="hidden sm:inline uppercase tracking-[0.16em] text-[#567166]">Move well. Live fully.</span>
     </footer>
   );
 }
