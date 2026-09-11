@@ -19,6 +19,7 @@ export default function NotesPanel({ clientId, ptId, authorId, canChooseVisibili
   const [content, setContent] = useState("");
   const [visibility, setVisibility] = useState<"shared" | "pt_only">("shared");
   const [loading, setLoading] = useState(true);
+  const [authorRoles, setAuthorRoles] = useState<Record<string, string[]>>({});
 
   async function load() {
     const { data } = await supabase
@@ -26,8 +27,31 @@ export default function NotesPanel({ clientId, ptId, authorId, canChooseVisibili
       .select("*, author:profiles!notes_author_id_fkey(full_name, username, avatar_url)")
       .eq("client_id", clientId)
       .order("created_at", { ascending: false });
-    setNotes((data as any) ?? []);
+    const list = (data as any) ?? [];
+    setNotes(list);
     setLoading(false);
+
+    const authorIds = [...new Set(list.map((n: any) => n.author_id))];
+    if (authorIds.length > 0) {
+      const { data: types } = await supabase
+        .from("account_types")
+        .select("profile_id, type")
+        .in("profile_id", authorIds as string[]);
+      const map: Record<string, string[]> = {};
+      (types ?? []).forEach((t: any) => {
+        map[t.profile_id] = map[t.profile_id] || [];
+        map[t.profile_id].push(t.type);
+      });
+      setAuthorRoles(map);
+    }
+  }
+
+  function roleLabel(id: string) {
+    const roles = authorRoles[id] ?? [];
+    if (roles.includes("owner")) return "Owner";
+    if (roles.includes("trainer")) return "Trainer";
+    if (roles.includes("client")) return "Client";
+    return null;
   }
 
   useEffect(() => {
@@ -55,9 +79,9 @@ export default function NotesPanel({ clientId, ptId, authorId, canChooseVisibili
   }
 
   return (
-    <div className="card p-4 flex flex-col h-full">
+    <div className="card p-4 flex flex-col">
       <h3 className="font-semibold mb-3">Notes</h3>
-      <div className="flex-1 overflow-y-auto space-y-2 mb-3 max-h-64">
+      <div className="overflow-y-auto space-y-2 mb-3 max-h-64">
         {loading && <p className="text-sm text-neutral-500">Loading…</p>}
         {!loading && notes.length === 0 && (
           <p className="text-sm text-neutral-500">No notes yet.</p>
@@ -67,8 +91,13 @@ export default function NotesPanel({ clientId, ptId, authorId, canChooseVisibili
             <div className="flex items-center justify-between mb-1">
               <span className="text-xs text-neutral-500 flex items-center gap-1.5">
                 <Avatar url={n.author?.avatar_url} name={n.author?.full_name} size={16} />
-                {n.author?.username || n.author?.full_name || "Someone"} ·{" "}
-                {new Date(n.created_at).toLocaleString()}
+                {n.author?.username || n.author?.full_name || "Someone"}
+                {roleLabel(n.author_id) && (
+                  <span className="font-semibold" style={{ color: "#4ade80" }}>
+                    - {roleLabel(n.author_id)}
+                  </span>
+                )}
+                <span>· {new Date(n.created_at).toLocaleString()}</span>
               </span>
               <div className="flex items-center gap-2">
                 {n.visibility === "pt_only" && (

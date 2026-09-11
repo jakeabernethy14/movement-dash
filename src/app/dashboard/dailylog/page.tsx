@@ -22,6 +22,9 @@ const emptyForm = {
   protein: "",
   carbs: "",
   fats: "",
+  sleep_hours: "",
+  energy_level: "",
+  stress_level: "",
   notes: "",
   mood: "",
 };
@@ -57,6 +60,9 @@ export default function DailyLogPage() {
       protein: log.protein?.toString() ?? "",
       carbs: log.carbs?.toString() ?? "",
       fats: log.fats?.toString() ?? "",
+      sleep_hours: log.sleep_hours?.toString() ?? "",
+      energy_level: log.energy_level?.toString() ?? "",
+      stress_level: log.stress_level?.toString() ?? "",
       notes: log.training_notes ?? "",
       mood: log.mood ?? "",
     });
@@ -75,6 +81,9 @@ export default function DailyLogPage() {
         protein: Number(form.protein) || null,
         carbs: Number(form.carbs) || null,
         fats: Number(form.fats) || null,
+        sleep_hours: Number(form.sleep_hours) || null,
+        energy_level: Number(form.energy_level) || null,
+        stress_level: Number(form.stress_level) || null,
         training_notes: form.notes,
         mood: form.mood || null,
         updated_at: new Date().toISOString(),
@@ -154,6 +163,40 @@ export default function DailyLogPage() {
                 />
               </div>
             ))}
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <label className="label-text">Sleep (hrs)</label>
+              <input
+                type="number"
+                step="0.5"
+                className="input-field"
+                value={form.sleep_hours}
+                onChange={(e) => setForm({ ...form, sleep_hours: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className="label-text">Energy (1-5)</label>
+              <input
+                type="number"
+                min="1"
+                max="5"
+                className="input-field"
+                value={form.energy_level}
+                onChange={(e) => setForm({ ...form, energy_level: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className="label-text">Stress (1-5)</label>
+              <input
+                type="number"
+                min="1"
+                max="5"
+                className="input-field"
+                value={form.stress_level}
+                onChange={(e) => setForm({ ...form, stress_level: e.target.value })}
+              />
+            </div>
           </div>
           <div>
             <label className="label-text">How are you feeling?</label>

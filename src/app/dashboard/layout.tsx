@@ -24,8 +24,9 @@ import {
   Salad,
   Globe,
   Trophy,
+  TrendingUp,
 } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useSession } from "@/lib/useSession";
 
@@ -35,26 +36,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const supabase = createClient();
   const session = useSession();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [unreadCount, setUnreadCount] = useState(0);
-
-  useEffect(() => {
-    if (!session.userId) return;
-    async function loadUnread() {
-      const { count } = await supabase
-        .from("messages")
-        .select("*", { count: "exact", head: true })
-        .eq("recipient_id", session.userId)
-        .eq("read", false);
-      setUnreadCount(count ?? 0);
-    }
-    loadUnread();
-    const id = setInterval(loadUnread, 20000);
-    window.addEventListener("tmc:messages-read", loadUnread);
-    return () => {
-      clearInterval(id);
-      window.removeEventListener("tmc:messages-read", loadUnread);
-    };
-  }, [session.userId]); // eslint-disable-line
 
   async function handleLogout() {
     await supabase.auth.signOut();
@@ -65,6 +46,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const clientLinks = [
     { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
     { href: "/dashboard/calendar", label: "Calendar", icon: Calendar },
+    { href: "/dashboard/progress", label: "Progress", icon: TrendingUp },
     { href: "/dashboard/schedule", label: "Schedule / Program", icon: NotebookPen },
     { href: "/dashboard/dailylog", label: "Daily Log", icon: NotebookPen },
     { href: "/dashboard/nutrition", label: "Nutrition Plan", icon: Salad },
@@ -86,6 +68,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
       { href: "/dashboard/clients", label: "Clients", icon: Users },
       { href: "/dashboard/checkins", label: "Daily Check-ins", icon: ClipboardList },
+      { href: "/dashboard/progress/pt", label: "Client Progress", icon: TrendingUp },
       { href: "/dashboard/pbs/pt", label: "PBs", icon: Trophy },
       { href: "/dashboard/sessions", label: "Sessions & Classes", icon: Calendar },
       { href: "/dashboard/programs", label: "Training Plans", icon: Dumbbell },
@@ -149,20 +132,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 key={link.href}
                 href={link.href}
                 onClick={() => setMobileOpen(false)}
-                className={`nav-link ${active ? "nav-link-active" : ""} justify-between`}
+                className={`nav-link ${active ? "nav-link-active" : ""}`}
               >
-                <span className="flex items-center gap-3">
-                  <Icon size={18} />
-                  {link.label}
-                </span>
-                {link.href === "/dashboard/messages" && unreadCount > 0 && (
-                  <span
-                    className="text-[10px] font-semibold rounded-full px-1.5 py-0.5"
-                    style={{ background: "rgba(212,175,55,0.18)", color: "#F2C94C" }}
-                  >
-                    {unreadCount > 9 ? "9+" : unreadCount}
-                  </span>
-                )}
+                <Icon size={18} />
+                {link.label}
               </Link>
             );
           })}

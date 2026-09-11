@@ -31,6 +31,7 @@ export default function AccountPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [fullName, setFullName] = useState("");
   const [username, setUsername] = useState("");
+  const [phone, setPhone] = useState("");
   const [bio, setBio] = useState("");
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [timezone, setTimezone] = useState("UTC");
@@ -42,6 +43,7 @@ export default function AccountPage() {
     if (!session.profile) return;
     setFullName(session.profile.full_name ?? "");
     setUsername(session.profile.username ?? "");
+    setPhone(session.profile.phone ?? "");
     setBio(session.profile.bio ?? "");
     setAvatarUrl(session.profile.avatar_url ?? null);
     setTimezone(session.profile.timezone || "UTC");
@@ -52,7 +54,7 @@ export default function AccountPage() {
     setMsg(null);
     const { error } = await supabase
       .from("profiles")
-      .update({ full_name: fullName, username: username || null, bio, timezone })
+      .update({ full_name: fullName, username: username || null, phone: phone || null, bio, timezone })
       .eq("id", session.userId);
     if (error) {
       setMsg({ type: "err", text: error.message.includes("duplicate") ? "That username is already taken." : error.message });
@@ -177,6 +179,10 @@ export default function AccountPage() {
         <div>
           <label className="label-text">Username</label>
           <input className="input-field" value={username} onChange={(e) => setUsername(e.target.value)} placeholder="Used to log in instead of email" />
+        </div>
+        <div>
+          <label className="label-text">Phone number</label>
+          <input className="input-field" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Optional" />
         </div>
         <div>
           <label className="label-text">Bio</label>

@@ -33,6 +33,8 @@ A Next.js 14 + Supabase dashboard for a personal training business, styled dark 
 - **Personal Bests**: clients log PRs (exercise / weight / reps-or-time / date); PTs browse any client's PBs via a dropdown.
 - **Program assignment redesign**: pick a plan, then either click a specific date on the client's calendar to place one day of the plan there, or set a date range and let the plan's days repeat/cycle across it automatically (e.g. a 3-day plan spread over the next 30 days). Assignments can be edited (notes) or deleted — deleting also removes the calendar sessions it created.
 - **Single source of truth for expiration**: the old separate "membership expiration (display only)" field is gone — `access_expires_at` is the one real expiration date everywhere, and a client's status automatically shows "Expired" the moment it passes (no background job needed, it's derived live).
+- **Progress tab**: a client's entire journey in one place — weight graph, body fat % graph, latest measurements, strength/PB progression, progress photos with a before/after comparison, and 30-day averages for sleep/energy/logging consistency, plus automatic flags like "↓ 1.8kg bodyweight over 30 days". Trainers get the same view for any client via a picker, plus workout adherence % and nutrition logging %.
+- **Phone numbers**: every profile can store one, editable from Account (self), and from a PT/owner's client-editing screens.
 
 ## 1. Supabase setup
 
@@ -43,14 +45,15 @@ A Next.js 14 + Supabase dashboard for a personal training business, styled dark 
 4. Then run `supabase/migration_003.sql` — adds the news/notice board, per-account timezones, and lets people delete their own notes.
 5. Then run `supabase/migration_004.sql` — adds weight tracking on daily logs, the public training plan library, and a safety trigger that guarantees every owner account also has trainer capability.
 6. Then run `supabase/migration_005.sql` — fixes a nutrition-plan save bug (missing unique constraint), adds Personal Bests, links calendar sessions back to the plan assignment that created them (so deleting an assignment cleans up its sessions too), and adds a missing check-ups delete policy.
-7. (Optional but recommended) Turn on **Realtime** for the `messages` table so chats update live without a refresh: **Database → Replication** in the Supabase dashboard, find `messages`, and toggle it on. Without this, messages still send/receive fine — the other person just needs to reopen or revisit the Messages page to see new ones instead of seeing them appear instantly.
-8. Go to **Authentication → Sign In / Providers → Email** and decide whether "Confirm email" is on or off
+7. Then run `supabase/migration_006.sql` — adds progress photos (with a private storage bucket only the client, their trainer, and the owner can access) and sleep/energy/stress fields on daily logs, for the new Progress tab.
+8. (Optional but recommended) Turn on **Realtime** for the `messages` table so chats update live without a refresh: **Database → Replication** in the Supabase dashboard, find `messages`, and toggle it on. Without this, messages still send/receive fine — the other person just needs to reopen or revisit the Messages page to see new ones instead of seeing them appear instantly.
+9. Go to **Authentication → Sign In / Providers → Email** and decide whether "Confirm email" is on or off
    (the in-app Settings toggle is a preference flag for your own reference — flip the real switch here too).
-9. Grab your **Project URL** and **Publishable key** from **Project Settings → API Keys**
+10. Grab your **Project URL** and **Publishable key** from **Project Settings → API Keys**
    (the newer `sb_publishable_...` key — Supabase's current recommended replacement for the older
    `anon` key; the app also accepts a legacy `anon` key if that's what your project has under
    `NEXT_PUBLIC_SUPABASE_ANON_KEY`).
-10. Also grab your **service_role** key (same page, "Reveal" next to `service_role`) — this is needed
+11. Also grab your **service_role** key (same page, "Reveal" next to `service_role`) — this is needed
    for the admin API route that lets PTs/owners reset a client's password or edit their account.
    **Keep this secret** — it must never be prefixed with `NEXT_PUBLIC_` or shipped to the browser.
 

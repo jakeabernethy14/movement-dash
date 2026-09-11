@@ -13,6 +13,7 @@ export default function ClientOverview({ userId }: { userId: string }) {
   const [weekEvents, setWeekEvents] = useState<any[]>([]);
   const [goals, setGoals] = useState<any[]>([]);
   const [ptNotes, setPtNotes] = useState<any[]>([]);
+  const [noteAuthorRoles, setNoteAuthorRoles] = useState<Record<string, string[]>>({});
   const [ptName, setPtName] = useState<string>("");
   const [activePlan, setActivePlan] = useState<any>(null);
 
@@ -64,6 +65,19 @@ export default function ClientOverview({ userId }: { userId: string }) {
         .order("created_at", { ascending: false })
         .limit(3);
       setPtNotes(notes ?? []);
+      const authorIds = [...new Set((notes ?? []).map((n: any) => n.author_id))];
+      if (authorIds.length > 0) {
+        const { data: types } = await supabase
+          .from("account_types")
+          .select("profile_id, type")
+          .in("profile_id", authorIds as string[]);
+        const map: Record<string, string[]> = {};
+        (types ?? []).forEach((t: any) => {
+          map[t.profile_id] = map[t.profile_id] || [];
+          map[t.profile_id].push(t.type);
+        });
+        setNoteAuthorRoles(map);
+      }
 
       const { data: plan } = await supabase
         .from("assigned_programs")
@@ -188,7 +202,13 @@ export default function ClientOverview({ userId }: { userId: string }) {
                 <div className="flex items-center gap-1.5 mt-1">
                   <Avatar url={n.author?.avatar_url} name={n.author?.full_name} size={16} />
                   <span className="text-xs text-neutral-500">
-                    {n.author?.username || n.author?.full_name || "Your PT"} ·{" "}
+                    {n.author?.username || n.author?.full_name || "Your PT"}
+                    {(() => {
+                      const roles = noteAuthorRoles[n.author_id] ?? [];
+                      const label = roles.includes("owner") ? "Owner" : roles.includes("trainer") ? "Trainer" : roles.includes("client") ? "Client" : null;
+                      return label ? <span className="font-semibold" style={{ color: "#4ade80" }}> - {label}</span> : null;
+                    })()}
+                    {" · "}
                     {format(new Date(n.created_at), "d MMM, HH:mm")}
                   </span>
                 </div>

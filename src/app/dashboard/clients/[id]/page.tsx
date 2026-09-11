@@ -1042,6 +1042,7 @@ function DetailsTab({ clientId, ptClient, onSaved, ptId }: { clientId: string; p
   const [status, setStatus] = useState(ptClient?.status ?? "active");
   const [fullName, setFullName] = useState("");
   const [username, setUsername] = useState("");
+  const [phone, setPhone] = useState("");
   const [accessExpiresAt, setAccessExpiresAt] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [accountMsg, setAccountMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
@@ -1057,13 +1058,14 @@ function DetailsTab({ clientId, ptClient, onSaved, ptId }: { clientId: string; p
   useEffect(() => {
     supabase
       .from("profiles")
-      .select("full_name, username, access_expires_at")
+      .select("full_name, username, phone, access_expires_at")
       .eq("id", clientId)
       .single()
       .then(({ data }) => {
         if (data) {
           setFullName(data.full_name ?? "");
           setUsername(data.username ?? "");
+          setPhone(data.phone ?? "");
           setAccessExpiresAt(data.access_expires_at ? data.access_expires_at.slice(0, 10) : "");
         }
       });
@@ -1103,6 +1105,7 @@ function DetailsTab({ clientId, ptClient, onSaved, ptId }: { clientId: string; p
         targetUserId: clientId,
         fullName,
         username,
+        phone,
         accessExpiresAt: accessExpiresAt ? new Date(accessExpiresAt).toISOString() : null,
         ...(newPassword ? { newPassword } : {}),
       }),
@@ -1179,6 +1182,10 @@ function DetailsTab({ clientId, ptClient, onSaved, ptId }: { clientId: string; p
         <div>
           <label className="label-text">Username</label>
           <input className="input-field" value={username} onChange={(e) => setUsername(e.target.value)} />
+        </div>
+        <div>
+          <label className="label-text">Phone number</label>
+          <input className="input-field" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Optional" />
         </div>
         <div>
           <label className="label-text">Access expires on</label>

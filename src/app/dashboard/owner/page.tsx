@@ -17,7 +17,7 @@ export default function OwnerPage() {
   async function load() {
     const { data: types } = await supabase
       .from("account_types")
-      .select("profile_id, type, profile:profiles(id, full_name, username, email, disabled)")
+      .select("profile_id, type, profile:profiles(id, full_name, username, phone, email, disabled)")
       .in("type", ["trainer", "owner"]);
 
     const map = new Map<string, any>();
@@ -39,7 +39,7 @@ export default function OwnerPage() {
     const { data: clients } = await supabase
       .from("pt_clients")
       .select(
-        "*, client:profiles!pt_clients_client_id_fkey(id, full_name, username, email, disabled, access_expires_at), pt:profiles!pt_clients_pt_id_fkey(full_name)"
+        "*, client:profiles!pt_clients_client_id_fkey(id, full_name, username, phone, email, disabled, access_expires_at), pt:profiles!pt_clients_pt_id_fkey(full_name)"
       )
       .order("created_at", { ascending: false });
     setAllClients(clients ?? []);
@@ -220,6 +220,8 @@ export default function OwnerPage() {
                 <td className="py-2">
                   {row.client?.disabled ? (
                     <span className="badge bg-red-900/30 text-red-300 border border-red-900">Disabled</span>
+                  ) : row.client?.access_expires_at && new Date(row.client.access_expires_at) < new Date() ? (
+                    <span className="badge bg-red-900/30 text-red-300 border border-red-900">Expired</span>
                   ) : (
                     <span className="badge bg-green-900/30 text-green-300 border border-green-900">Active</span>
                   )}
@@ -256,6 +258,7 @@ function EditAccountModal({
 }) {
   const [fullName, setFullName] = useState(target.full_name ?? "");
   const [username, setUsername] = useState(target.username ?? "");
+  const [phone, setPhone] = useState(target.phone ?? "");
   const [accessExpiresAt, setAccessExpiresAt] = useState(
     target.access_expires_at ? target.access_expires_at.slice(0, 10) : ""
   );
@@ -273,6 +276,7 @@ function EditAccountModal({
         targetUserId: target.id,
         fullName,
         username,
+        phone,
         accessExpiresAt: accessExpiresAt ? new Date(accessExpiresAt).toISOString() : null,
         ...(newPassword ? { newPassword } : {}),
       }),
@@ -304,6 +308,10 @@ function EditAccountModal({
         <div>
           <label className="label-text">Username</label>
           <input className="input-field" value={username} onChange={(e) => setUsername(e.target.value)} />
+        </div>
+        <div>
+          <label className="label-text">Phone number</label>
+          <input className="input-field" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Optional" />
         </div>
         <div>
           <label className="label-text">Access expires on (blank = never)</label>

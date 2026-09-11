@@ -13,11 +13,12 @@ import { createClient as createRawClient } from "@supabase/supabase-js";
 
 export async function POST(req: Request) {
   const body = await req.json();
-  const { targetUserId, newPassword, fullName, username, accessExpiresAt, disabled } = body as {
+  const { targetUserId, newPassword, fullName, username, phone, accessExpiresAt, disabled } = body as {
     targetUserId: string;
     newPassword?: string;
     fullName?: string;
     username?: string;
+    phone?: string;
     accessExpiresAt?: string | null;
     disabled?: boolean;
   };
@@ -86,6 +87,7 @@ export async function POST(req: Request) {
   const profileUpdate: Record<string, any> = {};
   if (fullName !== undefined) profileUpdate.full_name = fullName;
   if (username !== undefined) profileUpdate.username = username || null;
+  if (phone !== undefined) profileUpdate.phone = phone || null;
   if (accessExpiresAt !== undefined) profileUpdate.access_expires_at = accessExpiresAt;
   if (disabled !== undefined) profileUpdate.disabled = disabled;
 
