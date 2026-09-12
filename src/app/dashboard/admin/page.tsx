@@ -14,6 +14,7 @@ export default function AdminPage() {
   const session = useSession();
   const [tokens, setTokens] = useState<any[]>([]);
   const [clients, setClients] = useState<any[]>([]);
+  const [redeemedNames, setRedeemedNames] = useState<Record<string, string>>({});
   const [expiresInDays, setExpiresInDays] = useState("30");
   const [maxUses, setMaxUses] = useState("1");
   const [accessDays, setAccessDays] = useState("30");
@@ -26,6 +27,14 @@ export default function AdminPage() {
       .eq("pt_id", session.userId)
       .order("created_at", { ascending: false });
     setTokens(t ?? []);
+
+    const allRedeemedIds = [...new Set((t ?? []).flatMap((tok: any) => tok.redeemed_by ?? []))];
+    if (allRedeemedIds.length > 0) {
+      const { data: profiles } = await supabase.from("profiles").select("id, full_name").in("id", allRedeemedIds as string[]);
+      const map: Record<string, string> = {};
+      (profiles ?? []).forEach((p: any) => (map[p.id] = p.full_name));
+      setRedeemedNames(map);
+    }
 
     const { data: c } = await supabase
       .from("pt_clients")
@@ -106,19 +115,31 @@ export default function AdminPage() {
 
         <div className="mt-4 space-y-2">
           {tokens.length === 0 && <p className="text-sm text-neutral-500">No tokens generated yet.</p>}
-          {tokens.map((t) => (
+          {tokens.map((t) => {
+            const used = t.use_count >= t.max_uses;
+            return (
             <div
               key={t.id}
               className="flex items-center justify-between bg-base-850 border border-base-border rounded-lg px-3 py-2"
             >
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 flex-wrap">
                 <span className="font-mono text-gold-400 text-sm">{t.token}</span>
-                <span className="text-xs text-neutral-500">
+                <span
+                  className="text-xs font-medium"
+                  style={{ color: used ? "#f87171" : "#4ade80" }}
+                >
                   {t.use_count}/{t.max_uses} used
-                  {t.expires_at ? ` · expires ${new Date(t.expires_at).toLocaleDateString()}` : ""}
                 </span>
+                {t.expires_at && (
+                  <span className="text-xs text-neutral-500">expires {new Date(t.expires_at).toLocaleDateString()}</span>
+                )}
+                {(t.redeemed_by ?? []).length > 0 && (
+                  <span className="text-xs" style={{ color: "#f87171" }}>
+                    redeemed by {(t.redeemed_by as string[]).map((id) => redeemedNames[id] ?? "someone").join(", ")}
+                  </span>
+                )}
               </div>
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 shrink-0">
                 <button
                   onClick={() => navigator.clipboard.writeText(t.token)}
                   className="text-neutral-400 hover:text-gold-400"
@@ -126,12 +147,13 @@ export default function AdminPage() {
                 >
                   <Copy size={15} />
                 </button>
-                <button onClick={() => deleteToken(t.id)} className="text-neutral-400 hover:text-red-400" title="Revoke">
+                <button onClick={() => deleteToken(t.id)} className="text-neutral-400 hover:text-red-400" title="Revoke / delete">
                   <Trash2 size={15} />
                 </button>
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 

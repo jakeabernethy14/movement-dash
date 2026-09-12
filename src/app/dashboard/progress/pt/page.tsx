@@ -3,8 +3,8 @@ import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useSession } from "@/lib/useSession";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
-import { Camera } from "lucide-react";
 import { format, subDays } from "date-fns";
+import { metricColor } from "@/lib/metricColor";
 
 const GOLD = "#D4AF37";
 
@@ -17,7 +17,6 @@ export default function PtProgressPage() {
   const [bodyFatData, setBodyFatData] = useState<any[]>([]);
   const [latestMeasurements, setLatestMeasurements] = useState<Record<string, number> | null>(null);
   const [pbGroups, setPbGroups] = useState<Record<string, any[]>>({});
-  const [photos, setPhotos] = useState<any[]>([]);
   const [goals, setGoals] = useState<any[]>([]);
   const [averages, setAverages] = useState({ sleep: null as number | null, energy: null as number | null, stress: null as number | null, logRate: 0 });
   const [adherence, setAdherence] = useState({ workout: 0, nutrition: 0 });
@@ -44,11 +43,10 @@ export default function PtProgressPage() {
   async function loadClientProgress(clientId: string) {
     const since30 = format(subDays(new Date(), 30), "yyyy-MM-dd");
 
-    const [{ data: logs }, { data: checkups }, { data: pbs }, { data: photoData }, { data: goalData }, { data: sessions }] = await Promise.all([
+    const [{ data: logs }, { data: checkups }, { data: pbs }, { data: goalData }, { data: sessions }] = await Promise.all([
       supabase.from("daily_logs").select("*").eq("client_id", clientId).order("log_date", { ascending: true }),
       supabase.from("checkups").select("*").eq("client_id", clientId).order("checkup_date", { ascending: true }),
       supabase.from("personal_bests").select("*").eq("client_id", clientId).order("pb_date", { ascending: true }),
-      supabase.from("progress_photos").select("*").eq("client_id", clientId).order("taken_date", { ascending: false }).limit(8),
       supabase.from("goals").select("*").eq("client_id", clientId).order("created_at", { ascending: false }),
       supabase.from("schedule_events").select("*").eq("client_id", clientId).eq("event_type", "training").gte("event_date", since30),
     ]);
@@ -64,7 +62,6 @@ export default function PtProgressPage() {
       groups[pb.exercise].push(pb);
     });
     setPbGroups(groups);
-    setPhotos(photoData ?? []);
     setGoals(goalData ?? []);
 
     const recentLogs = (logs ?? []).filter((l) => l.log_date >= since30);
@@ -129,19 +126,19 @@ export default function PtProgressPage() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="kpi-card">
               <span className="text-neutral-400 text-sm">Workout adherence</span>
-              <span className="text-2xl font-bold">{adherence.workout}%</span>
+              <span className="text-2xl font-bold" style={{ color: metricColor("percent", adherence.workout).text }}>{adherence.workout}%</span>
             </div>
             <div className="kpi-card">
               <span className="text-neutral-400 text-sm">Nutrition logging</span>
-              <span className="text-2xl font-bold">{adherence.nutrition}%</span>
+              <span className="text-2xl font-bold" style={{ color: metricColor("percent", adherence.nutrition).text }}>{adherence.nutrition}%</span>
             </div>
             <div className="kpi-card">
               <span className="text-neutral-400 text-sm">Avg sleep (30d)</span>
-              <span className="text-2xl font-bold">{averages.sleep ? `${averages.sleep.toFixed(1)}h` : "—"}</span>
+              <span className="text-2xl font-bold" style={{ color: metricColor("sleep", averages.sleep).text }}>{averages.sleep ? `${averages.sleep.toFixed(1)}h` : "—"}</span>
             </div>
             <div className="kpi-card">
               <span className="text-neutral-400 text-sm">Avg energy (30d)</span>
-              <span className="text-2xl font-bold">{averages.energy ? `${averages.energy.toFixed(1)}/5` : "—"}</span>
+              <span className="text-2xl font-bold" style={{ color: metricColor("energy", averages.energy).text }}>{averages.energy ? `${averages.energy.toFixed(1)}/5` : "—"}</span>
             </div>
           </div>
 
@@ -236,23 +233,6 @@ export default function PtProgressPage() {
                 </div>
               )}
             </div>
-          </div>
-
-          <div className="card p-4">
-            <h3 className="font-semibold mb-3 flex items-center gap-2"><Camera size={16} className="text-gold-300" /> Progress photos</h3>
-            {photos.length === 0 ? (
-              <p className="text-sm text-neutral-500">No photos uploaded yet.</p>
-            ) : (
-              <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
-                {photos.map((p) => (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <div key={p.id} className="relative">
-                    <img src={p.photo_url} alt={p.taken_date} className="rounded-lg w-full h-24 object-cover" />
-                    <span className="absolute bottom-1 left-1 text-[10px] bg-black/60 rounded px-1">{p.taken_date}</span>
-                  </div>
-                ))}
-              </div>
-            )}
           </div>
         </>
       )}

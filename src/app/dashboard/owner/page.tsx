@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useSession } from "@/lib/useSession";
-import { ShieldCheck, ShieldOff, Plus, X, Pencil, Users, UserCog, Ticket, Building2 } from "lucide-react";
+import { ShieldCheck, ShieldOff, Plus, X, Pencil, Users, UserCog, Ticket, Building2, Trash2 } from "lucide-react";
 import StatCard from "@/components/StatCard";
 
 export default function OwnerPage() {
@@ -12,6 +12,7 @@ export default function OwnerPage() {
   const [tokens, setTokens] = useState<any[]>([]);
   const [allClients, setAllClients] = useState<any[]>([]);
   const [editTarget, setEditTarget] = useState<any | null>(null);
+  const [redeemedNames, setRedeemedNames] = useState<Record<string, string>>({});
   const [stats, setStats] = useState({ totalAccounts: 0, totalTrainers: 0, totalClients: 0, activeTokens: 0 });
 
   async function load() {
@@ -34,6 +35,14 @@ export default function OwnerPage() {
       .eq("role", "trainer")
       .order("created_at", { ascending: false });
     setTokens(tok ?? []);
+
+    const allRedeemedIds = [...new Set((tok ?? []).flatMap((t: any) => t.redeemed_by ?? []))];
+    if (allRedeemedIds.length > 0) {
+      const { data: profiles } = await supabase.from("profiles").select("id, full_name").in("id", allRedeemedIds as string[]);
+      const map: Record<string, string> = {};
+      (profiles ?? []).forEach((p: any) => (map[p.id] = p.full_name));
+      setRedeemedNames(map);
+    }
 
     // ALL clients across every trainer -- owner can see everything.
     const { data: clients } = await supabase
@@ -81,6 +90,11 @@ export default function OwnerPage() {
     load();
   }
 
+  async function deleteTrainerToken(id: string) {
+    await supabase.from("register_tokens").delete().eq("id", id);
+    load();
+  }
+
   async function removeTrainerRole(profileId: string) {
     if (!confirm("Remove trainer role from this account?")) return;
     await supabase.from("account_types").delete().eq("profile_id", profileId).eq("type", "trainer");
@@ -109,18 +123,33 @@ export default function OwnerPage() {
           </button>
         </div>
         <div className="space-y-2">
-          {tokens.map((t) => (
+          {tokens.map((t) => {
+            const used = t.use_count >= t.max_uses;
+            return (
             <div
               key={t.id}
               className="flex items-center justify-between bg-base-850 border border-base-border rounded-lg px-3 py-2 text-sm"
             >
-              <span className="font-mono text-gold-400">{t.token}</span>
-              <span className="text-xs text-neutral-500">
-                {t.use_count}/{t.max_uses} used
-                {t.expires_at ? ` · expires ${new Date(t.expires_at).toLocaleDateString()}` : ""}
-              </span>
+              <div className="flex items-center gap-3 flex-wrap">
+                <span className="font-mono text-gold-400">{t.token}</span>
+                <span className="text-xs font-medium" style={{ color: used ? "#f87171" : "#4ade80" }}>
+                  {t.use_count}/{t.max_uses} used
+                </span>
+                {t.expires_at && (
+                  <span className="text-xs text-neutral-500">expires {new Date(t.expires_at).toLocaleDateString()}</span>
+                )}
+                {(t.redeemed_by ?? []).length > 0 && (
+                  <span className="text-xs" style={{ color: "#f87171" }}>
+                    redeemed by {(t.redeemed_by as string[]).map((id) => redeemedNames[id] ?? "someone").join(", ")}
+                  </span>
+                )}
+              </div>
+              <button onClick={() => deleteTrainerToken(t.id)} className="text-neutral-400 hover:text-red-400 shrink-0" title="Delete token">
+                <Trash2 size={15} />
+              </button>
             </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 

@@ -30,6 +30,10 @@ export default function SessionsPage() {
       .select("*, client:profiles!schedule_events_client_id_fkey(full_name, avatar_url)")
       .eq("pt_id", session.userId)
       .gte("event_date", format(new Date(), "yyyy-MM-dd"))
+      // This page is for personal schedule + calls only -- a client's day-by-day
+      // workout plan (event_type 'training') is managed from their Program tab and
+      // reviewed on their Sessions calendar, not listed here.
+      .or("event_scope.eq.personal,event_type.eq.call")
       .order("event_date", { ascending: true })
       .order("start_time", { ascending: true })
       .limit(100);
@@ -58,7 +62,7 @@ export default function SessionsPage() {
       event_date: form.event_date,
       start_time: form.start_time || null,
       end_time: form.end_time || null,
-      event_type: form.event_type,
+      event_type: form.scope === "client" ? "call" : form.event_type,
     });
     setForm({ ...form, title: "", description: "" });
     setShowForm(false);
@@ -75,7 +79,7 @@ export default function SessionsPage() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-bold">Sessions & Classes</h1>
-          <p className="text-neutral-400 text-sm">Everything upcoming across all your clients and personal calendar.</p>
+          <p className="text-neutral-400 text-sm">Your personal schedule, classes, and client calls (day-by-day training plans live on each client's Program tab).</p>
         </div>
         <button onClick={() => setShowForm(!showForm)} className="btn-primary flex items-center gap-2">
           <Plus size={16} /> Log a session / class
@@ -97,7 +101,7 @@ export default function SessionsPage() {
               className={`badge cursor-pointer ${form.scope === "client" ? "badge-gold" : ""}`}
               style={form.scope !== "client" ? { background: "rgba(255,255,255,0.05)", color: "#a3a3a3", borderColor: "transparent" } : undefined}
             >
-              Client session
+              Call with a client
             </button>
           </div>
 
@@ -135,25 +139,17 @@ export default function SessionsPage() {
               value={form.start_time}
               onChange={(e) => setForm({ ...form, start_time: e.target.value })}
             />
-            <select
-              className="input-field"
-              value={form.event_type}
-              onChange={(e) => setForm({ ...form, event_type: e.target.value })}
-            >
-              {form.scope === "personal" ? (
-                <>
-                  <option value="class">Class</option>
-                  <option value="call">Call</option>
-                  <option value="other">Other</option>
-                </>
-              ) : (
-                <>
-                  <option value="training">Training</option>
-                  <option value="checkup">Check-up</option>
-                  <option value="rest">Rest day</option>
-                </>
-              )}
-            </select>
+            {form.scope === "personal" && (
+              <select
+                className="input-field"
+                value={form.event_type}
+                onChange={(e) => setForm({ ...form, event_type: e.target.value })}
+              >
+                <option value="class">Class</option>
+                <option value="call">Call</option>
+                <option value="other">Other</option>
+              </select>
+            )}
           </div>
           <textarea
             className="input-field resize-none"

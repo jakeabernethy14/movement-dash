@@ -120,6 +120,9 @@ function ProgramTab({ clientId, ptId }: { clientId: string; ptId: string }) {
   const [plans, setPlans] = useState<any[]>([]);
   const [assigned, setAssigned] = useState<any[]>([]);
   const [selectedPlan, setSelectedPlan] = useState("");
+  const [source, setSource] = useState<"plan" | "custom">("plan");
+  const [customTitle, setCustomTitle] = useState("");
+  const [customDescription, setCustomDescription] = useState("");
   const [mode, setMode] = useState<"single" | "repeat">("single");
   const [selectedDayIndex, setSelectedDayIndex] = useState(0);
   const [selectedDate, setSelectedDate] = useState<string>("");
@@ -179,22 +182,36 @@ function ProgramTab({ clientId, ptId }: { clientId: string; ptId: string }) {
   });
 
   async function assignSingleDay() {
-    if (!plan || !selectedDate) return;
+    if (!selectedDate) return;
+    if (source === "plan" && !plan) return;
+    if (source === "custom" && !customTitle.trim()) return;
     setAssigning(true);
-    const day = plan.content?.[selectedDayIndex];
-    const exerciseSummary = (day?.exercises ?? [])
-      .map((ex: any) => `${ex.name} — ${ex.sets}x${ex.reps}${ex.weight ? ` @ ${ex.weight}` : ""}`)
-      .join("\n");
+
+    let title: string;
+    let description: string;
+    let planId: string | null = null;
+
+    if (source === "plan" && plan) {
+      const day = plan.content?.[selectedDayIndex];
+      description = (day?.exercises ?? [])
+        .map((ex: any) => `${ex.name} — ${ex.sets}x${ex.reps}${ex.weight ? ` @ ${ex.weight}` : ""}`)
+        .join("\n");
+      title = `${plan.title}: ${day?.day ?? "Session"}`;
+      planId = plan.id;
+    } else {
+      title = customTitle.trim();
+      description = customDescription;
+    }
 
     const { data: assignment } = await supabase
       .from("assigned_programs")
       .insert({
-        plan_id: plan.id,
+        plan_id: planId,
         client_id: clientId,
         assigned_by: ptId,
         start_date: selectedDate,
         end_date: selectedDate,
-        notes: notes || `${plan.title}: ${day?.day ?? ""}`,
+        notes: notes || title,
       })
       .select()
       .single();
@@ -203,14 +220,16 @@ function ProgramTab({ clientId, ptId }: { clientId: string; ptId: string }) {
       client_id: clientId,
       pt_id: ptId,
       event_scope: "client",
-      title: `${plan.title}: ${day?.day ?? "Session"}`,
-      description: exerciseSummary,
+      title,
+      description,
       event_date: selectedDate,
       event_type: "training",
       assigned_program_id: assignment?.id ?? null,
     });
 
     setNotes("");
+    setCustomTitle("");
+    setCustomDescription("");
     setSelectedDate("");
     setAssigning(false);
     loadAssigned();
@@ -295,15 +314,67 @@ function ProgramTab({ clientId, ptId }: { clientId: string; ptId: string }) {
       <div className="grid lg:grid-cols-[1fr_1.2fr] gap-6">
         {/* LEFT: plan + assignment controls */}
         <div className="card p-4 space-y-3">
-          <h3 className="font-semibold">Assign a training plan</h3>
-          <select className="input-field" value={selectedPlan} onChange={(e) => { setSelectedPlan(e.target.value); setSelectedDayIndex(0); }}>
-            <option value="">Select a plan…</option>
-            {plans.map((p) => (
-              <option key={p.id} value={p.id}>{p.title}</option>
-            ))}
-          </select>
+          <h3 className="font-semibold">Add to the client's calendar</h3>
 
-          {plan && (
+          <div className="flex gap-2">
+            <button
+              onClick={() => setSource("plan")}
+              className="badge cursor-pointer"
+              style={source === "plan" ? { background: "rgba(212,175,55,0.14)", color: "#F2C94C", borderColor: "transparent" } : { background: "rgba(255,255,255,0.05)", color: "#a3a3a3", borderColor: "transparent" }}
+            >
+              From a saved plan
+            </button>
+            <button
+              onClick={() => setSource("custom")}
+              className="badge cursor-pointer"
+              style={source === "custom" ? { background: "rgba(212,175,55,0.14)", color: "#F2C94C", borderColor: "transparent" } : { background: "rgba(255,255,255,0.05)", color: "#a3a3a3", borderColor: "transparent" }}
+            >
+              Create a day on the spot
+            </button>
+          </div>
+
+          {source === "plan" && (
+            <select className="input-field" value={selectedPlan} onChange={(e) => { setSelectedPlan(e.target.value); setSelectedDayIndex(0); }}>
+              <option value="">Select a plan…</option>
+              {plans.map((p) => (
+                <option key={p.id} value={p.id}>{p.title}</option>
+              ))}
+            </select>
+          )}
+
+          {source === "custom" && (
+            <div className="space-y-2 border border-white/[0.06] rounded-lg p-3 bg-base-850/60">
+              <input
+                className="input-field"
+                placeholder="Session title (e.g. Upper body strength)"
+                value={customTitle}
+                onChange={(e) => setCustomTitle(e.target.value)}
+              />
+              <textarea
+                className="input-field resize-none"
+                rows={3}
+                placeholder="Exercises / what to do"
+                value={customDescription}
+                onChange={(e) => setCustomDescription(e.target.value)}
+              />
+              <p className="text-sm text-neutral-400">
+                {selectedDate ? (
+                  <>Selected date: <span className="text-gold-300">{selectedDate}</span></>
+                ) : (
+                  "Click a date on the calendar on the right →"
+                )}
+              </p>
+              <button
+                onClick={assignSingleDay}
+                disabled={!selectedDate || !customTitle.trim() || assigning}
+                className="btn-primary w-full"
+              >
+                {assigning ? "Assigning…" : "Add to the selected date"}
+              </button>
+            </div>
+          )}
+
+          {source === "plan" && plan && (
             <>
               <div className="flex gap-2">
                 <button
@@ -417,18 +488,19 @@ function ProgramTab({ clientId, ptId }: { clientId: string; ptId: string }) {
             {Array.from({ length: daysInMonth }).map((_, i) => {
               const dateStr = dayName(y, m, i + 1);
               const hasEvents = eventsByDate[dateStr]?.length > 0;
-              const isSelected = mode === "single" && selectedDate === dateStr;
+              const canPick = source === "custom" || (source === "plan" && mode === "single" && !!plan);
+              const isSelected = canPick && selectedDate === dateStr;
               return (
                 <button
                   key={dateStr}
-                  onClick={() => mode === "single" && plan && setSelectedDate(dateStr)}
-                  disabled={mode !== "single" || !plan}
+                  onClick={() => canPick && setSelectedDate(dateStr)}
+                  disabled={!canPick}
                   className="relative text-xs h-10 rounded-lg flex items-center justify-center transition-colors"
                   style={{
                     background: isSelected ? "rgba(212,175,55,0.18)" : "rgba(255,255,255,0.02)",
                     border: isSelected ? "1px solid rgba(212,175,55,0.5)" : "1px solid transparent",
-                    color: mode !== "single" || !plan ? "#525252" : "#d4d4d4",
-                    cursor: mode === "single" && plan ? "pointer" : "default",
+                    color: canPick ? "#d4d4d4" : "#525252",
+                    cursor: canPick ? "pointer" : "default",
                   }}
                 >
                   {i + 1}
@@ -439,7 +511,7 @@ function ProgramTab({ clientId, ptId }: { clientId: string; ptId: string }) {
           </div>
           <p className="text-xs text-neutral-500 mt-3">
             Gold dots = days that already have something scheduled.
-            {mode === "single" ? " Click an empty date to place the selected plan day there." : ""}
+            {source === "custom" ? " Click an empty date to place this custom session there." : mode === "single" ? " Click an empty date to place the selected plan day there." : ""}
           </p>
         </div>
       </div>
@@ -858,140 +930,139 @@ function GoalsTab({ clientId, ptId, clientName }: { clientId: string; ptId: stri
 // ---------------- Sessions tab (PT calendar entries for this client + responses) ----------------
 function SessionsTab({ clientId, ptId }: { clientId: string; ptId: string }) {
   const supabase = createClient();
+  const [monthCursor, setMonthCursor] = useState(new Date());
   const [events, setEvents] = useState<any[]>([]);
-  const [form, setForm] = useState({
-    title: "",
-    event_date: new Date().toISOString().slice(0, 10),
-    start_time: "",
-    event_type: "training",
-    description: "",
-  });
+  const [hoveredDate, setHoveredDate] = useState<string | null>(null);
+  const [viewing, setViewing] = useState<any | null>(null);
 
   async function load() {
+    const start = new Date(monthCursor.getFullYear(), monthCursor.getMonth(), 1).toISOString().slice(0, 10);
+    const end = new Date(monthCursor.getFullYear(), monthCursor.getMonth() + 1, 0).toISOString().slice(0, 10);
     const { data } = await supabase
       .from("schedule_events")
       .select("*")
       .eq("client_id", clientId)
-      .order("event_date", { ascending: false });
+      .gte("event_date", start)
+      .lte("event_date", end);
     setEvents(data ?? []);
   }
 
   useEffect(() => {
     load();
-  }, [clientId]); // eslint-disable-line
+  }, [clientId, monthCursor]); // eslint-disable-line
 
-  async function addSession() {
-    if (!form.title.trim()) return;
-    await supabase.from("schedule_events").insert({
-      client_id: clientId,
-      pt_id: ptId,
-      title: form.title,
-      description: form.description,
-      event_date: form.event_date,
-      start_time: form.start_time || null,
-      event_type: form.event_type,
-      event_scope: "client",
-    });
-    setForm({ ...form, title: "", description: "" });
+  async function deleteEvent(id: string) {
+    if (!confirm("Delete this session from the client's calendar?")) return;
+    await supabase.from("schedule_events").delete().eq("id", id);
+    setViewing(null);
     load();
   }
 
-  async function deleteSession(id: string) {
-    await supabase.from("schedule_events").delete().eq("id", id);
-    load();
+  const y = monthCursor.getFullYear();
+  const m = monthCursor.getMonth();
+  const firstOfMonth = new Date(y, m, 1);
+  const daysInMonth = new Date(y, m + 1, 0).getDate();
+  const leadingBlanks = (firstOfMonth.getDay() + 6) % 7; // Monday-first
+
+  const eventsByDate: Record<string, any[]> = {};
+  events.forEach((e) => {
+    eventsByDate[e.event_date] = eventsByDate[e.event_date] || [];
+    eventsByDate[e.event_date].push(e);
+  });
+
+  function dateStr(day: number) {
+    return new Date(y, m, day).toISOString().slice(0, 10);
   }
 
   return (
-    <div className="grid md:grid-cols-2 gap-6">
-      <div className="card p-4 space-y-3">
-        <h3 className="font-semibold">Schedule a session</h3>
-        <input
-          className="input-field"
-          placeholder="Title (e.g. Upper body strength)"
-          value={form.title}
-          onChange={(e) => setForm({ ...form, title: e.target.value })}
-        />
-        <div className="grid grid-cols-2 gap-3">
-          <input
-            type="date"
-            className="input-field"
-            value={form.event_date}
-            onChange={(e) => setForm({ ...form, event_date: e.target.value })}
-          />
-          <input
-            type="time"
-            className="input-field"
-            value={form.start_time}
-            onChange={(e) => setForm({ ...form, start_time: e.target.value })}
-          />
-        </div>
-        <select
-          className="input-field"
-          value={form.event_type}
-          onChange={(e) => setForm({ ...form, event_type: e.target.value })}
-        >
-          <option value="training">Training</option>
-          <option value="checkup">Check-up</option>
-          <option value="rest">Rest day</option>
-          <option value="note">Note</option>
-        </select>
-        <textarea
-          className="input-field resize-none"
-          rows={2}
-          placeholder="Description / what to do"
-          value={form.description}
-          onChange={(e) => setForm({ ...form, description: e.target.value })}
-        />
-        <button onClick={addSession} className="btn-primary w-full">
-          Add to schedule
-        </button>
-      </div>
+    <div className="space-y-4">
+      <p className="text-sm text-neutral-400">
+        The client's sessions and responses. Days are highlighted{" "}
+        <span className="text-green-400 font-medium">green</span> once they've logged a result.
+        Sessions themselves are created from the <span className="text-gold-400">Program</span> tab
+        or, for calls, from <span className="text-gold-400">Sessions & Classes</span>.
+      </p>
 
       <div className="card p-4">
-        <h3 className="font-semibold mb-3">Sessions & client responses</h3>
-        <p className="text-xs text-neutral-500 mb-3">
-          Sessions the client has logged a result for are highlighted{" "}
-          <span className="text-green-400 font-medium">green</span>.
-        </p>
-        <div className="space-y-2 max-h-[32rem] overflow-y-auto">
-          {events.length === 0 && <p className="text-sm text-neutral-500">No sessions scheduled yet.</p>}
-          {events.map((e) => (
-            <div
-              key={e.id}
-              className={`rounded-lg p-3 text-sm border ${
-                e.client_response
-                  ? "bg-green-900/15 border-green-800/60"
-                  : "bg-base-850 border-base-border"
-              }`}
-            >
-              <div className="flex justify-between items-start">
-                <div>
-                  <span className="font-medium">{e.title}</span>
-                  <span className="badge badge-gold ml-2">{e.event_type}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-neutral-500 text-xs">
-                    {e.event_date} {e.start_time?.slice(0, 5) ?? ""}
-                  </span>
-                  <button onClick={() => deleteSession(e.id)} className="text-neutral-500 hover:text-red-400">
-                    <Trash2 size={13} />
+        <div className="flex items-center justify-between mb-4">
+          <button onClick={() => setMonthCursor(new Date(y, m - 1, 1))} className="p-1.5 rounded hover:bg-white/5 text-neutral-400">‹</button>
+          <span className="font-semibold">{monthCursor.toLocaleDateString(undefined, { month: "long", year: "numeric" })}</span>
+          <button onClick={() => setMonthCursor(new Date(y, m + 1, 1))} className="p-1.5 rounded hover:bg-white/5 text-neutral-400">›</button>
+        </div>
+        <div className="grid grid-cols-7 gap-1 text-center text-[10px] text-neutral-500 mb-1">
+          {["M", "T", "W", "T", "F", "S", "S"].map((d, i) => <span key={i}>{d}</span>)}
+        </div>
+        <div className="grid grid-cols-7 gap-1">
+          {Array.from({ length: leadingBlanks }).map((_, i) => <span key={"b" + i} />)}
+          {Array.from({ length: daysInMonth }).map((_, i) => {
+            const iso = dateStr(i + 1);
+            const dayEvents = eventsByDate[iso] ?? [];
+            const hasResponse = dayEvents.some((e) => e.client_response);
+            const hasEvents = dayEvents.length > 0;
+            return (
+              <div
+                key={iso}
+                onMouseEnter={() => setHoveredDate(iso)}
+                onMouseLeave={() => setHoveredDate((d) => (d === iso ? null : d))}
+                className="relative h-16 rounded-lg flex flex-col items-center justify-center text-xs border"
+                style={{
+                  background: hasResponse ? "rgba(74,222,128,0.14)" : hasEvents ? "rgba(212,175,55,0.08)" : "rgba(255,255,255,0.02)",
+                  borderColor: hasResponse ? "rgba(74,222,128,0.4)" : "rgba(255,255,255,0.06)",
+                }}
+              >
+                <span className={hasResponse ? "text-green-300 font-medium" : "text-neutral-300"}>{i + 1}</span>
+                {hasEvents && (
+                  <span className="text-[9px] text-neutral-500 mt-0.5">{dayEvents.length} session{dayEvents.length > 1 ? "s" : ""}</span>
+                )}
+                {hasEvents && hoveredDate === iso && (
+                  <button
+                    onClick={() => setViewing(dayEvents[0])}
+                    className="absolute inset-x-1 bottom-1 text-[10px] py-0.5 rounded bg-gold-400 text-base-950 font-semibold"
+                  >
+                    View
                   </button>
-                </div>
+                )}
               </div>
-              {e.description && <p className="text-neutral-400 mt-1">{e.description}</p>}
-              {e.client_response && (
-                <div className="mt-2 pt-2 border-t border-green-800/40">
-                  <p className="text-xs text-green-400 font-medium mb-0.5">Client's result / notes:</p>
-                  <p className="text-neutral-200">{e.client_response}</p>
-                </div>
-              )}
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
+
+      {viewing && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="card p-5 w-full max-w-md space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="font-semibold">{viewing.title}</h3>
+                <p className="text-xs text-neutral-500">{viewing.event_date} {viewing.start_time?.slice(0, 5) ?? ""}</p>
+              </div>
+              <button onClick={() => setViewing(null)} className="text-neutral-400 hover:text-neutral-200">✕</button>
+            </div>
+            <span className="badge badge-gold">{viewing.event_type}</span>
+            {viewing.description && (
+              <div>
+                <p className="text-xs text-neutral-500 mb-1">Plan</p>
+                <p className="text-sm text-neutral-200 whitespace-pre-wrap">{viewing.description}</p>
+              </div>
+            )}
+            {viewing.client_response ? (
+              <div className="pt-2 border-t border-green-800/40">
+                <p className="text-xs text-green-400 font-medium mb-1">Client's result / notes</p>
+                <p className="text-sm text-neutral-200">{viewing.client_response}</p>
+              </div>
+            ) : (
+              <p className="text-sm text-neutral-500">No response logged yet.</p>
+            )}
+            <button onClick={() => deleteEvent(viewing.id)} className="btn-danger text-sm w-full">
+              Delete this session
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+
 
 // ---------------- Daily Log tab (read-only for PT: calories/macros/training notes) ----------------
 function DailyLogTab({ clientId }: { clientId: string }) {

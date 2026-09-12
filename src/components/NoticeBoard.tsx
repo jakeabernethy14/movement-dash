@@ -18,6 +18,7 @@ export default function NoticeBoard({
   const [posts, setPosts] = useState<any[]>([]);
   const [content, setContent] = useState("");
   const [posting, setPosting] = useState(false);
+  const [authorRoles, setAuthorRoles] = useState<Record<string, string[]>>({});
 
   async function load() {
     const { data } = await supabase
@@ -25,7 +26,29 @@ export default function NoticeBoard({
       .select("*, author:profiles!announcements_author_id_fkey(full_name, username, avatar_url)")
       .order("created_at", { ascending: false })
       .limit(10);
-    setPosts(data ?? []);
+    const list = data ?? [];
+    setPosts(list);
+
+    const authorIds = [...new Set(list.map((p: any) => p.author_id))];
+    if (authorIds.length > 0) {
+      const { data: types } = await supabase
+        .from("account_types")
+        .select("profile_id, type")
+        .in("profile_id", authorIds as string[]);
+      const map: Record<string, string[]> = {};
+      (types ?? []).forEach((t: any) => {
+        map[t.profile_id] = map[t.profile_id] || [];
+        map[t.profile_id].push(t.type);
+      });
+      setAuthorRoles(map);
+    }
+  }
+
+  function roleLabel(id: string) {
+    const roles = authorRoles[id] ?? [];
+    if (roles.includes("owner")) return "Owner";
+    if (roles.includes("trainer")) return "Trainer";
+    return null;
   }
 
   useEffect(() => {
@@ -76,7 +99,11 @@ export default function NoticeBoard({
             <div className="flex-1 min-w-0">
               <div className="flex items-center justify-between gap-2">
                 <span className="text-xs text-neutral-500">
-                  {p.author?.username || p.author?.full_name || "Someone"} ·{" "}
+                  {p.author?.username || p.author?.full_name || "Someone"}
+                  {roleLabel(p.author_id) && (
+                    <span className="font-semibold" style={{ color: "#4ade80" }}> - {roleLabel(p.author_id)}</span>
+                  )}
+                  {" · "}
                   {format(new Date(p.created_at), "d MMM, HH:mm")}
                 </span>
                 {(p.author_id === userId || isOwner) && (

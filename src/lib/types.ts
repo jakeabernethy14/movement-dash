@@ -35,6 +35,7 @@ export interface RegisterToken {
   max_uses: number;
   use_count: number;
   access_days: number | null;
+  redeemed_by: string[];
   expires_at: string | null;
   created_at: string;
 }
