@@ -1,178 +1,52 @@
 "use client";
-import BackToTop from "@/components/BackToTop";
-import TimezoneClock from "@/components/TimezoneClock";
-import Avatar from "@/components/Avatar";
-import LockedAccountScreen from "@/components/LockedAccountScreen";
-import Footer from "@/components/Footer";
-import Link from "next/link";
+import { useCallback, useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import {
-  LayoutDashboard,
-  Users,
-  Dumbbell,
-  ShieldCheck,
-  Settings,
-  Calendar,
-  Target,
-  LogOut,
-  Menu,
-  X,
-  NotebookPen,
-  UserCircle,
-  MessageCircle,
-  ClipboardList,
-  Salad,
-  Globe,
-  Trophy,
-  TrendingUp,
-} from "lucide-react";
-import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useSession } from "@/lib/useSession";
-
+import { dateKey, expiresSoon } from "@/lib/dashboard";
+import DashboardShell, { type WorkspaceAlert } from "@/components/DashboardShell";
+import type { SearchClient } from "@/components/CommandPalette";
+import LockedAccountScreen from "@/components/LockedAccountScreen";
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const pathname = usePathname();
-  const router = useRouter();
   const supabase = createClient();
   const session = useSession();
-  const [mobileOpen, setMobileOpen] = useState(false);
-
-  async function handleLogout() {
-    await supabase.auth.signOut();
-    router.push("/");
-    router.refresh();
+  const router = useRouter();
+  const pathname = usePathname();
+  const [clients, setClients] = useState<SearchClient[]>([]);
+  const [alerts, setAlerts] = useState<WorkspaceAlert[]>([]);
+  const [alertsLoading, setAlertsLoading] = useState(true);
+  const [alertsError, setAlertsError] = useState(false);
+  const [logoutError, setLogoutError] = useState("");
+  const staff = session.isTrainer || session.isOwner;
+  const loadAlerts = useCallback(async () => {
+    if (!session.userId) return;
+    setAlertsLoading(true); setAlertsError(false);
+    try {
+      const [messages, events, roster] = await Promise.all([
+        supabase.from("messages").select("id", { count: "exact", head: true }).eq("recipient_id", session.userId).eq("read", false),
+        supabase.from("schedule_events").select("id, title, start_time, client_id, event_scope").eq(staff ? "pt_id" : "client_id", session.userId).eq("event_date", dateKey()).eq("client_completed", false).neq("event_type", "rest").order("start_time").limit(8),
+        staff ? supabase.from("pt_clients").select("client:profiles!pt_clients_client_id_fkey(id, full_name, access_expires_at)").eq("pt_id", session.userId) : Promise.resolve({ data: [], error: null }),
+      ]);
+      if (messages.error || events.error || roster.error) throw new Error("Could not refresh notifications");
+      const next: WorkspaceAlert[] = [];
+      if (messages.count) next.push({ id: "messages", kind: "message", title: `${messages.count} unread message${messages.count === 1 ? "" : "s"}`, detail: "Pick up where you left off with your conversations.", href: "/dashboard/messages" });
+      const people = (roster.data ?? []).flatMap((row: any) => row.client ? [row.client] : []);
+      setClients(people.map((c: any) => ({ id: c.id, name: c.full_name })));
+      people.filter((c: any) => expiresSoon(c.access_expires_at)).forEach((c: any) => next.push({ id: `renew-${c.id}`, kind: "renewal", title: `${c.full_name}: renewal coming up`, detail: `Account access ends ${new Date(c.access_expires_at).toLocaleDateString()}.`, href: `/dashboard/clients/${c.id}` }));
+      if (!staff && expiresSoon(session.profile?.access_expires_at ?? null)) next.push({ id: "my-renewal", kind: "renewal", title: "Your account renewal is coming up", detail: "Contact your trainer to keep your coaching going.", href: "/dashboard/messages" });
+      (events.data ?? []).forEach(e => next.push({ id: e.id, kind: "session", title: e.title, detail: `Today${e.start_time ? ` at ${e.start_time.slice(0, 5)}` : " - scheduled for you"}`, href: !staff ? "/dashboard/schedule" : e.client_id ? `/dashboard/clients/${e.client_id}` : "/dashboard/sessions" }));
+      setAlerts(next);
+    } catch { setAlertsError(true); }
+    finally { setAlertsLoading(false); }
+  }, [session.userId, session.profile?.access_expires_at, staff, supabase]);
+  useEffect(() => { loadAlerts(); window.addEventListener("focus", loadAlerts); return () => window.removeEventListener("focus", loadAlerts); }, [loadAlerts, pathname]);
+  async function logout() {
+    setLogoutError("");
+    const { error } = await supabase.auth.signOut();
+    if (error) { setLogoutError("Unable to sign out. Check your connection and try again."); return; }
+    router.push("/"); router.refresh();
   }
-
-  const clientLinks = [
-    { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
-    { href: "/dashboard/calendar", label: "Calendar", icon: Calendar },
-    { href: "/dashboard/progress", label: "Progress", icon: TrendingUp },
-    { href: "/dashboard/schedule", label: "Schedule / Program", icon: NotebookPen },
-    { href: "/dashboard/dailylog", label: "Daily Log", icon: NotebookPen },
-    { href: "/dashboard/nutrition", label: "Nutrition Plan", icon: Salad },
-    { href: "/dashboard/pbs", label: "PBs", icon: Trophy },
-    { href: "/dashboard/goals", label: "Goals", icon: Target },
-    { href: "/dashboard/messages", label: "Messages", icon: MessageCircle },
-    { href: "/dashboard/public-plans", label: "Public Training Plans", icon: Globe },
-    { href: "/dashboard/account", label: "Account", icon: UserCircle },
-  ];
-
-  const ownerLinks = [
-    { href: "/dashboard/owner", label: "Owner", icon: ShieldCheck },
-    { href: "/dashboard/settings", label: "Settings", icon: Settings },
-  ];
-
-  let links = [...clientLinks];
-  if (session.isTrainer || session.isOwner) {
-    links = [
-      { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
-      { href: "/dashboard/clients", label: "Clients", icon: Users },
-      { href: "/dashboard/checkins", label: "Daily Check-ins", icon: ClipboardList },
-      { href: "/dashboard/progress/pt", label: "Client Progress", icon: TrendingUp },
-      { href: "/dashboard/pbs/pt", label: "PBs", icon: Trophy },
-      { href: "/dashboard/sessions", label: "Sessions & Classes", icon: Calendar },
-      { href: "/dashboard/programs", label: "Training Plans", icon: Dumbbell },
-      { href: "/dashboard/public-plans", label: "Public Training Plans", icon: Globe },
-      { href: "/dashboard/messages", label: "Messages", icon: MessageCircle },
-      { href: "/dashboard/admin", label: "PT Admin", icon: ShieldCheck },
-      { href: "/dashboard/account", label: "Account", icon: UserCircle },
-    ];
-  }
-  if (session.isOwner) links = [...links, ...ownerLinks];
-
-  // Lockout gate: an account whose access has expired can still sign in, but sees
-  // only a renewal screen until they redeem a fresh token (or log out).
-  const isExpired =
-    !session.loading &&
-    session.profile?.access_expires_at &&
-    new Date(session.profile.access_expires_at) < new Date();
-
-  if (isExpired && session.userId && session.profile) {
-    return (
-      <LockedAccountScreen
-        userId={session.userId}
-        fullName={session.profile.full_name}
-        email={session.profile.email}
-      />
-    );
-  }
-
-  return (
-    <div className="min-h-screen">
-      {/* Mobile top bar -- fixed */}
-      <div className="md:hidden fixed top-0 inset-x-0 h-14 border-b flex items-center justify-between px-4 z-40" style={{background: "linear-gradient(180deg, #0d0d0d, #090909)", borderColor: "rgba(255,255,255,0.06)"}}>
-        <span className="font-bold">
-          The <span className="text-gold-400">Movement</span> Coaching
-        </span>
-        <button onClick={() => setMobileOpen(!mobileOpen)}>
-          {mobileOpen ? <X size={22} /> : <Menu size={22} />}
-        </button>
-      </div>
-
-      {/* Sidebar -- always fixed to the viewport, on both mobile and desktop, so it
-          never moves as the page scrolls and never leaves a background gap. */}
-      <aside
-        className={`fixed z-30 top-14 md:top-0 bottom-0 w-64 border-r flex flex-col transition-transform md:translate-x-0 ${
-          mobileOpen ? "translate-x-0" : "-translate-x-full"
-        }`}
-        style={{ background: "linear-gradient(180deg, #0d0d0d, #070707)", borderColor: "rgba(255,255,255,0.06)" }}
-      >
-        <div className="hidden md:block p-5 border-b border-base-border">
-          <span className="font-bold text-lg">
-            The <span className="text-gold-400">Movement</span> Coaching
-          </span>
-        </div>
-
-        <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
-          {links.map((link) => {
-            const Icon = link.icon;
-            const active = pathname === link.href;
-            return (
-              <Link
-                key={link.href}
-                href={link.href}
-                onClick={() => setMobileOpen(false)}
-                className={`nav-link ${active ? "nav-link-active" : ""}`}
-              >
-                <Icon size={18} />
-                {link.label}
-              </Link>
-            );
-          })}
-        </nav>
-
-        <div className="p-3 border-t border-base-border space-y-2">
-          <div className="flex items-center gap-3 px-2 py-2">
-            <Avatar url={session.profile?.avatar_url} name={session.profile?.full_name} size={36} />
-            <div className="min-w-0">
-              <p className="text-sm font-medium truncate">
-                {session.profile?.full_name || "…"}
-              </p>
-              <p className="text-xs text-neutral-500 truncate">
-                {session.roles.join(" · ") || "…"}
-              </p>
-            </div>
-          </div>
-          <div className="px-2">
-            <TimezoneClock timezone={session.profile?.timezone || "UTC"} />
-          </div>
-          <button onClick={handleLogout} className="nav-link w-full text-left">
-            <LogOut size={18} />
-            Sign out
-          </button>
-        </div>
-      </aside>
-
-      {/* Main content -- offset past the fixed sidebar, with bottom padding that
-          reserves room for the fixed footer (this is also the gap you asked for
-          between the last card and the footer). */}
-      <main className="md:ml-64 pt-14 md:pt-0 pb-24">
-        <div className="max-w-screen-2xl mx-auto p-4 md:p-10">{children}</div>
-      </main>
-
-      {/* Footer -- always pinned to the very bottom of the viewport */}
-      <Footer />
-      <BackToTop />
-    </div>
-  );
+  const expired = !session.loading && session.profile?.access_expires_at && new Date(session.profile.access_expires_at) < new Date();
+  if (expired && session.userId && session.profile) return <LockedAccountScreen userId={session.userId} fullName={session.profile.full_name} email={session.profile.email}/>;
+  return <DashboardShell name={session.profile?.full_name || "Loading..."} avatarUrl={session.profile?.avatar_url} timezone={session.profile?.timezone || "Pacific/Auckland"} staff={staff} owner={session.isOwner} clients={clients} alerts={alerts} alertsLoading={alertsLoading} alertsError={alertsError} onRefreshAlerts={loadAlerts} onLogout={logout}>{logoutError && <div className="error-banner" role="alert">{logoutError}</div>}{children}</DashboardShell>;
 }

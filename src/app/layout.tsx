@@ -2,8 +2,9 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "The Movement Coaching",
-  description: "Client & training management dashboard",
+  title: { default: "The Movement Coaching", template: "%s | The Movement Coaching" },
+  icons: { icon: "/favicon.svg" },
+  description: "Your people. Your programme. Your progress. Personal coaching, brought together.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

@@ -1,3 +1,8 @@
+> **Updated design package:** Start with [START-HERE.md](START-HERE.md) for this upgrade,
+> [DESIGN-UPGRADE.md](DESIGN-UPGRADE.md) for changes and [TESTING.md](TESTING.md) for
+> verification limits. Your existing database should not be reinitialised for this redesign.
+> The guide below is retained from the original upload for fresh-install reference.
+
 # The Movement Coaching — Client Dashboard
 
 A Next.js 14 + Supabase dashboard for a personal training business, styled dark + gold.

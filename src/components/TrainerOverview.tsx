@@ -1,226 +1,90 @@
 "use client";
-import { useEffect, useState } from "react";
-import { Users, Dumbbell, CalendarCheck, AlertTriangle, Plus } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { addDays } from "date-fns";
+import { AlertCircle, CalendarPlus, Loader2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import StatCard from "./StatCard";
-import MiniCalendar from "./MiniCalendar";
+import { useSession } from "@/lib/useSession";
+import { buildActivity, dateKey, type CoachDashboardData, type DashboardClient, type DashboardEvent } from "@/lib/dashboard";
+import CoachDashboardView from "./CoachDashboardView";
 import NotesPanel from "./NotesPanel";
 import NoticeBoard from "./NoticeBoard";
-import Avatar from "./Avatar";
-import { format } from "date-fns";
+import Modal from "./ui/Modal";
+import { toast } from "./ui/Toast";
 
+const empty: CoachDashboardData = { clients: [], planCount: 0, upcomingCount: 0, activity: [], selectedDate: dateKey(), dayEvents: [] };
 export default function TrainerOverview({ userId, isOwner }: { userId: string; isOwner?: boolean }) {
   const supabase = createClient();
-  const [stats, setStats] = useState({
-    clients: 0,
-    programs: 0,
-    upcoming: 0,
-    expiringSoon: 0,
-  });
-  const [markedDates, setMarkedDates] = useState<string[]>([]);
-  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
-  const [selectedDayEvents, setSelectedDayEvents] = useState<any[]>([]);
+  const session = useSession();
+  const [data, setData] = useState<CoachDashboardData>(empty);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   const [showEventForm, setShowEventForm] = useState(false);
-  const [eventForm, setEventForm] = useState({
-    title: "",
-    event_date: new Date().toISOString().slice(0, 10),
-    start_time: "",
-    end_time: "",
-    event_type: "class",
-    description: "",
-  });
+  const [saving, setSaving] = useState(false);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [formError, setFormError] = useState("");
+  const [form, setForm] = useState({ title: "", description: "", event_date: dateKey(), start_time: "", end_time: "", event_type: "class" });
+  const selected = useRef(dateKey());
+  const request = useRef(0);
 
-  async function loadStats() {
-    const { count: clientCount } = await supabase
-      .from("pt_clients")
-      .select("*", { count: "exact", head: true })
-      .eq("pt_id", userId);
+  const loadDay = useCallback(async (date: string) => {
+    const version = ++request.current;
+    selected.current = date;
+    setData(d => ({ ...d, selectedDate: date, dayEvents: [] }));
+    const { data: events, error: dayError } = await supabase.from("schedule_events").select("*, client:profiles!schedule_events_client_id_fkey(full_name, avatar_url)").eq("pt_id", userId).eq("event_date", date).order("start_time", { ascending: true });
+    if (version !== request.current) return;
+    if (dayError) { setError("We couldn't load that day's sessions. Please try again."); return; }
+    setData(d => ({ ...d, dayEvents: (events ?? []) as DashboardEvent[] }));
+  }, [supabase, userId]);
 
-    const { count: programCount } = await supabase
-      .from("training_plans")
-      .select("*", { count: "exact", head: true })
-      .eq("pt_id", userId);
+  const load = useCallback(async () => {
+    setError("");
+    try {
+      const today = dateKey();
+      const [roster, plans, events, messages] = await Promise.all([
+        supabase.from("pt_clients").select("description, status, client:profiles!pt_clients_client_id_fkey(id, full_name, email, avatar_url, access_expires_at, disabled)").eq("pt_id", userId),
+        supabase.from("training_plans").select("id", { count: "exact", head: true }).eq("pt_id", userId),
+        supabase.from("schedule_events").select("*").eq("pt_id", userId).gte("event_date", dateKey(addDays(new Date(), -6))).lte("event_date", dateKey(addDays(new Date(), 6))),
+        supabase.from("messages").select("sender_id").eq("recipient_id", userId).eq("read", false),
+      ]);
+      for (const result of [roster, plans, events, messages]) if (result.error) throw result.error;
+      const unread = new Set((messages.data ?? []).map(m => m.sender_id));
+      const clients: DashboardClient[] = (roster.data ?? []).flatMap((row: any) => row.client ? [{ id: row.client.id, name: row.client.full_name, email: row.client.email, avatarUrl: row.client.avatar_url, description: row.description, status: row.status, expiresAt: row.client.access_expires_at, disabled: row.client.disabled, unread: unread.has(row.client.id) }] : []);
+      const allEvents = (events.data ?? []) as DashboardEvent[];
+      setData(d => ({ ...d, clients, planCount: plans.count ?? 0, upcomingCount: allEvents.filter(e => e.event_date >= today && e.event_type !== "rest" && e.event_type !== "note").length, activity: buildActivity(allEvents) }));
+      await loadDay(selected.current);
+    } catch { setError("Your dashboard couldn't be refreshed. Check your connection and try again."); }
+    finally { setLoading(false); }
+  }, [supabase, userId, loadDay]);
+  useEffect(() => { load(); return () => { request.current++; }; }, [load]);
 
-    const in7 = new Date();
-    in7.setDate(in7.getDate() + 7);
-
-    const { data: upcomingEvents } = await supabase
-      .from("schedule_events")
-      .select("*")
-      .eq("pt_id", userId)
-      .gte("event_date", format(new Date(), "yyyy-MM-dd"))
-      .lte("event_date", format(in7, "yyyy-MM-dd"));
-
-    const { count: expiring } = await supabase
-      .from("pt_clients")
-      .select("*", { count: "exact", head: true })
-      .eq("pt_id", userId)
-      .lte("expiration", format(in7, "yyyy-MM-dd"))
-      .gte("expiration", format(new Date(), "yyyy-MM-dd"));
-
-    setStats({
-      clients: clientCount ?? 0,
-      programs: programCount ?? 0,
-      upcoming: upcomingEvents?.length ?? 0,
-      expiringSoon: expiring ?? 0,
-    });
-    setMarkedDates((upcomingEvents ?? []).map((e) => e.event_date));
+  async function addPersonalEvent(e: React.FormEvent) {
+    e.preventDefault();
+    if (saving || !form.title.trim()) return;
+    if (form.end_time && (!form.start_time || form.end_time <= form.start_time)) { setFormError("Choose an end time after the start time."); return; }
+    setSaving(true); setFormError("");
+    try {
+      const { error } = await supabase.from("schedule_events").insert({ pt_id: userId, client_id: null, event_scope: "personal", title: form.title.trim(), description: form.description.trim(), event_date: form.event_date, start_time: form.start_time || null, end_time: form.end_time || null, event_type: form.event_type });
+      if (error) throw error;
+      setShowEventForm(false); setForm(f => ({ ...f, title: "", description: "" })); toast("Session added to your calendar."); await load();
+    } catch { setFormError("That event couldn't be saved. Your details are still here - please try again."); }
+    finally { setSaving(false); }
   }
-
-  async function loadDay(date: Date) {
-    const iso = format(date, "yyyy-MM-dd");
-    const { data } = await supabase
-      .from("schedule_events")
-      .select("*, client:profiles!schedule_events_client_id_fkey(full_name, avatar_url)")
-      .eq("pt_id", userId)
-      .eq("event_date", iso)
-      .order("start_time", { ascending: true });
-    setSelectedDayEvents(data ?? []);
+  async function deleteEvent() {
+    if (!deleteId || saving) return;
+    setSaving(true);
+    try {
+      const { error } = await supabase.from("schedule_events").delete().eq("id", deleteId).eq("pt_id", userId);
+      if (error) throw error;
+      setDeleteId(null); toast("Session removed from your calendar."); await load();
+    } catch { toast("We couldn't delete this session. Please try again.", "error"); }
+    finally { setSaving(false); }
   }
-
-  useEffect(() => {
-    loadStats();
-    loadDay(selectedDate);
-  }, [userId]); // eslint-disable-line
-
-  function handleSelectDate(date: Date) {
-    setSelectedDate(date);
-    loadDay(date);
-  }
-
-  async function addPersonalEvent() {
-    if (!eventForm.title.trim()) return;
-    await supabase.from("schedule_events").insert({
-      pt_id: userId,
-      client_id: null,
-      event_scope: "personal",
-      title: eventForm.title,
-      description: eventForm.description,
-      event_date: eventForm.event_date,
-      start_time: eventForm.start_time || null,
-      end_time: eventForm.end_time || null,
-      event_type: eventForm.event_type,
-    });
-    setEventForm({ ...eventForm, title: "", description: "" });
-    setShowEventForm(false);
-    loadStats();
-    loadDay(selectedDate);
-  }
-
-  async function deleteEvent(id: string) {
-    await supabase.from("schedule_events").delete().eq("id", id);
-    loadDay(selectedDate);
-    loadStats();
-  }
-
-  const isToday = format(selectedDate, "yyyy-MM-dd") === format(new Date(), "yyyy-MM-dd");
-
-  return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Overview</h1>
-        <p className="text-neutral-400 text-sm">Here's what's happening with your clients.</p>
-      </div>
-
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard label="Total clients" value={stats.clients} icon={Users} />
-        <StatCard label="Training plans" value={stats.programs} icon={Dumbbell} />
-        <StatCard label="Sessions (7 days)" value={stats.upcoming} icon={CalendarCheck} />
-        <StatCard
-          label="Expiring soon"
-          value={stats.expiringSoon}
-          icon={AlertTriangle}
-          sub="Within 7 days"
-        />
-      </div>
-
-      <div className="grid md:grid-cols-3 gap-6">
-        <div className="md:col-span-1 space-y-6">
-          <MiniCalendar markedDates={markedDates} onSelectDate={handleSelectDate} />
-          <div className="card p-4">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="font-semibold">
-                {isToday ? "Today" : format(selectedDate, "d MMM")}'s sessions
-              </h3>
-              <button
-                onClick={() => {
-                  setEventForm({ ...eventForm, event_date: format(selectedDate, "yyyy-MM-dd") });
-                  setShowEventForm(!showEventForm);
-                }}
-                className="text-gold-400 hover:text-gold-300"
-                title="Add a calendar event"
-              >
-                <Plus size={18} />
-              </button>
-            </div>
-
-            {showEventForm && (
-              <div className="bg-base-850 border border-white/[0.06] rounded-lg p-3 mb-3 space-y-2">
-                <input
-                  className="input-field text-sm"
-                  placeholder="Title (e.g. Group class, Coaching call)"
-                  value={eventForm.title}
-                  onChange={(e) => setEventForm({ ...eventForm, title: e.target.value })}
-                />
-                <div className="grid grid-cols-3 gap-2">
-                  <input
-                    type="date"
-                    className="input-field text-sm"
-                    value={eventForm.event_date}
-                    onChange={(e) => setEventForm({ ...eventForm, event_date: e.target.value })}
-                  />
-                  <input
-                    type="time"
-                    className="input-field text-sm"
-                    value={eventForm.start_time}
-                    onChange={(e) => setEventForm({ ...eventForm, start_time: e.target.value })}
-                  />
-                  <select
-                    className="input-field text-sm"
-                    value={eventForm.event_type}
-                    onChange={(e) => setEventForm({ ...eventForm, event_type: e.target.value })}
-                  >
-                    <option value="class">Class</option>
-                    <option value="call">Call</option>
-                    <option value="other">Other</option>
-                  </select>
-                </div>
-                <button onClick={addPersonalEvent} className="btn-primary text-sm w-full py-1.5">
-                  Add to my calendar
-                </button>
-              </div>
-            )}
-
-            {selectedDayEvents.length === 0 && (
-              <p className="text-sm text-neutral-500">Nothing scheduled this day.</p>
-            )}
-            <div className="space-y-2">
-              {selectedDayEvents.map((e) => (
-                <div key={e.id} className="flex items-center justify-between gap-2 text-sm bg-base-850 rounded-lg p-2 border border-white/[0.05]">
-                  <div className="flex items-center gap-2 min-w-0">
-                    {e.client?.full_name && <Avatar url={e.client.avatar_url} name={e.client.full_name} size={20} />}
-                    <span className="truncate">
-                      {e.title}
-                      {e.event_scope === "personal" && <span className="badge badge-gold ml-2">{e.event_type}</span>}
-                      {e.client?.full_name && <span className="text-neutral-500"> — {e.client.full_name}</span>}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <span className="text-gold-300">{e.start_time?.slice(0, 5) ?? ""}</span>
-                    <button onClick={() => deleteEvent(e.id)} className="text-neutral-600 hover:text-red-400 text-xs">
-                      ✕
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-        <div className="md:col-span-2 space-y-6">
-          <NoticeBoard userId={userId} canPost isOwner={isOwner} />
-          <NotesPanel clientId={userId} ptId={userId} authorId={userId} isSelfNote />
-        </div>
-      </div>
-    </div>
-  );
+  if (loading) return <div aria-busy="true" aria-label="Loading your dashboard"><div className="skeleton h-12 w-72 mb-6"/><div className="skeleton h-52 mb-5"/><div className="stats-grid">{[0, 1, 2, 3].map(i => <div className="skeleton h-32" key={i}/>)}</div><div className="skeleton h-72"/></div>;
+  return <>
+    {error && <div role="alert" className="error-banner"><AlertCircle size={17}/>{error}<button onClick={load}>Try again</button></div>}
+    <CoachDashboardView name={session.profile?.full_name || "Coach"} data={data} onDateChange={date => { setError(""); loadDay(date); }} onAddEvent={() => { setForm(f => ({ ...f, event_date: data.selectedDate })); setFormError(""); setShowEventForm(true); }} onDeleteEvent={setDeleteId}/>
+    <div className="dashboard-secondary"><NoticeBoard userId={userId} canPost isOwner={isOwner}/><NotesPanel clientId={userId} ptId={userId} authorId={userId} isSelfNote/></div>
+    {showEventForm && <Modal title="Add a calendar event" onClose={() => !saving && setShowEventForm(false)}><form onSubmit={addPersonalEvent} className="space-y-4">{formError && <div role="alert" className="error-banner">{formError}</div>}<div><label htmlFor="event-title" className="label-text">Session name</label><input data-autofocus id="event-title" required maxLength={140} className="input-field" placeholder="e.g. Small-group strength or coaching call" value={form.title} onChange={e => setForm({ ...form, title: e.target.value })}/></div><div className="grid grid-cols-2 gap-3"><div><label htmlFor="event-date" className="label-text">Date</label><input id="event-date" required type="date" className="input-field" value={form.event_date} onChange={e => setForm({ ...form, event_date: e.target.value })}/></div><div><label htmlFor="event-type" className="label-text">Type</label><select id="event-type" className="input-field" value={form.event_type} onChange={e => setForm({ ...form, event_type: e.target.value })}><option value="class">Class</option><option value="call">Coaching call</option><option value="other">Other</option></select></div><div><label htmlFor="event-start" className="label-text">Start time (optional)</label><input id="event-start" type="time" className="input-field" value={form.start_time} onChange={e => setForm({ ...form, start_time: e.target.value })}/></div><div><label htmlFor="event-end" className="label-text">End time (optional)</label><input id="event-end" type="time" className="input-field" value={form.end_time} onChange={e => setForm({ ...form, end_time: e.target.value })}/></div></div><div><label htmlFor="event-notes" className="label-text">Notes (optional)</label><textarea id="event-notes" rows={3} className="input-field" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })}/></div><p className="muted">This adds a personal calendar event. Assign individual client training from their profile.</p><div className="flex justify-end gap-2"><button type="button" className="btn-secondary" disabled={saving} onClick={() => setShowEventForm(false)}>Cancel</button><button type="submit" className="btn-primary" disabled={saving}>{saving ? <Loader2 className="animate-spin" size={16}/> : <CalendarPlus size={16}/>}Save event</button></div></form></Modal>}
+    {deleteId && <Modal title="Remove this session?" onClose={() => !saving && setDeleteId(null)}><p className="muted">This will permanently remove the selected event and any response attached to it. It cannot be undone.</p><div className="flex justify-end gap-2 mt-6"><button className="btn-secondary" onClick={() => setDeleteId(null)} disabled={saving}>Keep session</button><button className="btn-danger" onClick={deleteEvent} disabled={saving}>{saving ? "Removing..." : "Remove session"}</button></div></Modal>}
+  </>;
 }

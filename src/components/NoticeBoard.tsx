@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import Avatar from "./Avatar";
+import { toast } from "./ui/Toast";
 import { Megaphone, Trash2 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -56,17 +57,20 @@ export default function NoticeBoard({
   }, []); // eslint-disable-line
 
   async function post() {
-    if (!content.trim()) return;
+    if (!content.trim() || posting) return;
     setPosting(true);
-    await supabase.from("announcements").insert({ author_id: userId, content: content.trim() });
-    setContent("");
-    setPosting(false);
-    load();
+    try {
+      const { error } = await supabase.from("announcements").insert({ author_id: userId, content: content.trim() });
+      if (error) throw error;
+      setContent(""); toast("Your studio update has been posted."); await load();
+    } catch { toast("Couldn't post your update. Your draft is still here.", "error"); }
+    finally { setPosting(false); }
   }
-
   async function remove(id: string) {
-    await supabase.from("announcements").delete().eq("id", id);
-    load();
+    if (!window.confirm("Delete this studio update? This cannot be undone.")) return;
+    const { error } = await supabase.from("announcements").delete().eq("id", id);
+    if (error) { toast("Couldn't delete this update. Please try again.", "error"); return; }
+    toast("Studio update removed."); load();
   }
 
   return (
@@ -80,6 +84,7 @@ export default function NoticeBoard({
         <div className="flex gap-2 mb-3">
           <input
             className="input-field"
+            aria-label="Studio announcement"
             placeholder="Post an update for everyone…"
             value={content}
             onChange={(e) => setContent(e.target.value)}
@@ -107,7 +112,7 @@ export default function NoticeBoard({
                   {format(new Date(p.created_at), "d MMM, HH:mm")}
                 </span>
                 {(p.author_id === userId || isOwner) && (
-                  <button onClick={() => remove(p.id)} className="text-neutral-600 hover:text-red-400">
+                  <button aria-label="Delete announcement" onClick={() => remove(p.id)} className="text-neutral-600 hover:text-red-400">
                     <Trash2 size={12} />
                   </button>
                 )}

@@ -1,227 +1,51 @@
 "use client";
-import { useEffect, useState } from "react";
-import { createClient } from "@/lib/supabase/client";
-import { format } from "date-fns";
-import { Target, MessageCircle, CalendarDays, Dumbbell } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { addDays, format } from "date-fns";
 import Link from "next/link";
+import { AlertCircle, ArrowUpRight, MessageCircle } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
+import { useSession } from "@/lib/useSession";
+import { dateKey, buildActivity, type DashboardEvent } from "@/lib/dashboard";
+import type { Goal } from "@/lib/types";
+import ClientDashboardView, { type ClientDashboardData } from "./ClientDashboardView";
 import NoticeBoard from "./NoticeBoard";
 import Avatar from "./Avatar";
-
+const empty: ClientDashboardData = { trainerName: "", planTitle: null, todayEvents: [], upcomingEvents: [], activity: [], goals: [], loggedDays: 0, loggedToday: false, bestCount: 0 };
 export default function ClientOverview({ userId }: { userId: string }) {
   const supabase = createClient();
-  const [todayEvents, setTodayEvents] = useState<any[]>([]);
-  const [weekEvents, setWeekEvents] = useState<any[]>([]);
-  const [goals, setGoals] = useState<any[]>([]);
-  const [ptNotes, setPtNotes] = useState<any[]>([]);
-  const [noteAuthorRoles, setNoteAuthorRoles] = useState<Record<string, string[]>>({});
-  const [ptName, setPtName] = useState<string>("");
-  const [activePlan, setActivePlan] = useState<any>(null);
-
-  useEffect(() => {
-    async function load() {
-      const in7 = new Date();
-      in7.setDate(in7.getDate() + 7);
-      const today = format(new Date(), "yyyy-MM-dd");
-
-      const { data: pt } = await supabase
-        .from("pt_clients")
-        .select("pt_id, pt:profiles!pt_clients_pt_id_fkey(full_name)")
-        .eq("client_id", userId)
-        .single();
-      // @ts-ignore
-      setPtName(pt?.pt?.full_name ?? "");
-
-      const { data: today_ } = await supabase
-        .from("schedule_events")
-        .select("*")
-        .eq("client_id", userId)
-        .eq("event_date", today)
-        .order("start_time", { ascending: true });
-      setTodayEvents(today_ ?? []);
-
-      const { data: events } = await supabase
-        .from("schedule_events")
-        .select("*")
-        .eq("client_id", userId)
-        .gt("event_date", today)
-        .lte("event_date", format(in7, "yyyy-MM-dd"))
-        .order("event_date", { ascending: true });
-      setWeekEvents(events ?? []);
-
-      const { data: g } = await supabase
-        .from("goals")
-        .select("*")
-        .eq("client_id", userId)
-        .eq("status", "in_progress")
-        .order("target_date", { ascending: true })
-        .limit(3);
-      setGoals(g ?? []);
-
-      const { data: notes } = await supabase
-        .from("notes")
-        .select("*, author:profiles!notes_author_id_fkey(full_name, username, avatar_url)")
-        .eq("client_id", userId)
-        .eq("visibility", "shared")
-        .order("created_at", { ascending: false })
-        .limit(3);
-      setPtNotes(notes ?? []);
-      const authorIds = [...new Set((notes ?? []).map((n: any) => n.author_id))];
-      if (authorIds.length > 0) {
-        const { data: types } = await supabase
-          .from("account_types")
-          .select("profile_id, type")
-          .in("profile_id", authorIds as string[]);
+  const session = useSession();
+  const [data, setData] = useState<ClientDashboardData>(empty);
+  const [notes, setNotes] = useState<any[]>([]);
+  const [roles, setRoles] = useState<Record<string, string[]>>({});
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const load = useCallback(async () => {
+    setError("");
+    try {
+      const today = dateKey(), since = dateKey(addDays(new Date(), -6)), until = dateKey(addDays(new Date(), 6));
+      const [pt, events, goals, logs, bests, plan, sharedNotes] = await Promise.all([
+        supabase.from("pt_clients").select("pt:profiles!pt_clients_pt_id_fkey(full_name)").eq("client_id", userId).limit(1).maybeSingle(),
+        supabase.from("schedule_events").select("*").eq("client_id", userId).gte("event_date", since).lte("event_date", until).order("event_date").order("start_time"),
+        supabase.from("goals").select("*").eq("client_id", userId).eq("status", "in_progress").order("target_date"),
+        supabase.from("daily_logs").select("log_date").eq("client_id", userId).gte("log_date", since).lte("log_date", today),
+        supabase.from("personal_bests").select("id", { count: "exact", head: true }).eq("client_id", userId),
+        supabase.from("assigned_programs").select("plan:training_plans(title)").eq("client_id", userId).lte("start_date", today).or(`end_date.is.null,end_date.gte.${today}`).order("start_date", { ascending: false }).limit(1).maybeSingle(),
+        supabase.from("notes").select("*, author:profiles!notes_author_id_fkey(full_name, username, avatar_url)").eq("client_id", userId).eq("visibility", "shared").neq("author_id", userId).order("created_at", { ascending: false }).limit(3),
+      ]);
+      for (const r of [pt, events, goals, logs, bests, plan, sharedNotes]) if (r.error) throw r.error;
+      const allEvents = (events.data ?? []) as DashboardEvent[];
+      setData({ trainerName: (pt.data as any)?.pt?.full_name ?? "", planTitle: (plan.data as any)?.plan?.title ?? null, todayEvents: allEvents.filter(e => e.event_date === today), upcomingEvents: allEvents.filter(e => e.event_date > today), activity: buildActivity(allEvents), goals: (goals.data ?? []) as Goal[], loggedDays: new Set((logs.data ?? []).map(l => l.log_date)).size, loggedToday: (logs.data ?? []).some(l => l.log_date === today), bestCount: bests.count ?? 0 });
+      setNotes(sharedNotes.data ?? []);
+      const ids = [...new Set((sharedNotes.data ?? []).map(n => n.author_id))];
+      if (ids.length) {
+        const { data: types } = await supabase.from("account_types").select("profile_id, type").in("profile_id", ids);
         const map: Record<string, string[]> = {};
-        (types ?? []).forEach((t: any) => {
-          map[t.profile_id] = map[t.profile_id] || [];
-          map[t.profile_id].push(t.type);
-        });
-        setNoteAuthorRoles(map);
+        (types ?? []).forEach(t => { (map[t.profile_id] ??= []).push(t.type); }); setRoles(map);
       }
-
-      const { data: plan } = await supabase
-        .from("assigned_programs")
-        .select("*, plan:training_plans(title)")
-        .eq("client_id", userId)
-        .lte("start_date", today)
-        .order("start_date", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      setActivePlan(plan);
-    }
-    load();
-  }, [userId]); // eslint-disable-line
-
-  return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Welcome back</h1>
-        {ptName && <p className="text-neutral-400 text-sm">Trainer: {ptName}</p>}
-      </div>
-
-      {activePlan?.plan && (
-        <div className="card p-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: "rgba(212,175,55,0.12)", border: "1px solid rgba(212,175,55,0.3)" }}>
-              <Dumbbell size={16} className="text-gold-300" />
-            </div>
-            <div>
-              <p className="text-xs text-neutral-500">Current plan</p>
-              <p className="font-medium">{activePlan.plan.title}</p>
-            </div>
-          </div>
-          <Link href="/dashboard/calendar" className="text-sm text-gold-300 hover:underline">
-            View calendar →
-          </Link>
-        </div>
-      )}
-
-      <div className="card p-4">
-        <div className="flex items-center gap-2 mb-3">
-          <CalendarDays size={16} className="text-gold-300" />
-          <h3 className="font-semibold">Today — {format(new Date(), "EEEE d MMMM")}</h3>
-        </div>
-        {todayEvents.length === 0 && <p className="text-sm text-neutral-500">Nothing scheduled today. Rest day!</p>}
-        <div className="grid sm:grid-cols-2 gap-2">
-          {todayEvents.map((e) => (
-            <div key={e.id} className="bg-base-850 border border-white/[0.05] rounded-lg p-3 text-sm">
-              <div className="flex justify-between">
-                <span className="font-medium">{e.title}</span>
-                <span className="text-gold-300">{e.start_time?.slice(0, 5) ?? ""}</span>
-              </div>
-              {e.description && <p className="text-neutral-400 mt-1">{e.description}</p>}
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="grid md:grid-cols-3 gap-6">
-        <div className="card p-4 md:col-span-1">
-          <div className="flex items-center gap-2 mb-3">
-            <CalendarDays size={16} className="text-gold-300" />
-            <h3 className="font-semibold">Coming up</h3>
-          </div>
-          {weekEvents.length === 0 && (
-            <p className="text-sm text-neutral-500">Nothing else scheduled this week.</p>
-          )}
-          <div className="space-y-2">
-            {weekEvents.map((e) => (
-              <div key={e.id} className="bg-base-850 border border-white/[0.05] rounded-lg p-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="font-medium">{e.title}</span>
-                  <span className="text-gold-300">{e.start_time?.slice(0, 5) ?? ""}</span>
-                </div>
-                <span className="text-xs text-neutral-500">
-                  {format(new Date(e.event_date), "EEE d MMM")}
-                </span>
-              </div>
-            ))}
-          </div>
-          <Link href="/dashboard/calendar" className="text-sm text-gold-300 hover:underline block mt-3">
-            View full calendar →
-          </Link>
-        </div>
-
-        <div className="card p-4 md:col-span-1">
-          <div className="flex items-center gap-2 mb-3">
-            <Target size={16} className="text-gold-300" />
-            <h3 className="font-semibold">Active goals</h3>
-          </div>
-          {goals.length === 0 && <p className="text-sm text-neutral-500">No goals set yet.</p>}
-          <div className="space-y-3">
-            {goals.map((g) => (
-              <div key={g.id}>
-                <div className="flex justify-between text-sm mb-1">
-                  <span>{g.title}</span>
-                  <span className="text-neutral-500">{g.progress}%</span>
-                </div>
-                <div className="w-full h-1.5 bg-base-800 rounded-full overflow-hidden">
-                  <div
-                    className="h-full"
-                    style={{ width: `${g.progress}%`, background: "linear-gradient(90deg, #806515, #f2c94c)" }}
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
-          <Link href="/dashboard/goals" className="text-sm text-gold-300 hover:underline block mt-3">
-            View all goals →
-          </Link>
-        </div>
-
-        <div className="card p-4 md:col-span-1">
-          <div className="flex items-center gap-2 mb-3">
-            <MessageCircle size={16} className="text-gold-300" />
-            <h3 className="font-semibold">Notes from your PT</h3>
-          </div>
-          {ptNotes.length === 0 && <p className="text-sm text-neutral-500">Nothing yet.</p>}
-          <div className="space-y-2">
-            {ptNotes.map((n) => (
-              <div key={n.id} className="bg-base-850 border border-white/[0.05] rounded-lg p-2 text-sm">
-                <p className="text-neutral-200">{n.content}</p>
-                <div className="flex items-center gap-1.5 mt-1">
-                  <Avatar url={n.author?.avatar_url} name={n.author?.full_name} size={16} />
-                  <span className="text-xs text-neutral-500">
-                    {n.author?.username || n.author?.full_name || "Your PT"}
-                    {(() => {
-                      const roles = noteAuthorRoles[n.author_id] ?? [];
-                      const label = roles.includes("owner") ? "Owner" : roles.includes("trainer") ? "Trainer" : roles.includes("client") ? "Client" : null;
-                      return label ? <span className="font-semibold" style={{ color: "#4ade80" }}> - {label}</span> : null;
-                    })()}
-                    {" · "}
-                    {format(new Date(n.created_at), "d MMM, HH:mm")}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-          <Link href="/dashboard/messages" className="text-sm text-gold-300 hover:underline block mt-3">
-            Message your trainer →
-          </Link>
-        </div>
-      </div>
-
-      <NoticeBoard userId={userId} canPost={false} />
-    </div>
-  );
+    } catch { setError("We couldn't refresh your overview. Please check your connection and try again."); }
+    finally { setLoading(false); }
+  }, [supabase, userId]);
+  useEffect(() => { load(); }, [load]);
+  if (loading) return <div aria-busy="true" aria-label="Loading your overview"><div className="skeleton h-12 w-64 mb-6"/><div className="skeleton h-52 mb-5"/><div className="stats-grid">{[0, 1, 2, 3].map(i => <div key={i} className="skeleton h-32"/>)}</div><div className="skeleton h-64"/></div>;
+  return <>{error && <div className="error-banner" role="alert"><AlertCircle size={17}/>{error}<button onClick={load}>Try again</button></div>}<ClientDashboardView name={session.profile?.full_name || "there"} data={data}/><div className="dashboard-secondary"><section className="card panel"><div className="panel-heading"><div><h2>A note from your coach</h2><p>Guidance for the journey ahead.</p></div><MessageCircle size={17} className="gold-text"/></div>{!notes.length && <p className="empty-state">Your coach's shared notes will appear here.</p>}{notes.map(n => <div className="coach-note-item" key={n.id}><p>{n.content}</p><div><Avatar name={n.author?.full_name} url={n.author?.avatar_url} size={22}/><span>{n.author?.username || n.author?.full_name || "Your coach"}{(roles[n.author_id]?.includes("owner") || roles[n.author_id]?.includes("trainer")) && <span className="text-green-400"> / {roles[n.author_id]?.includes("owner") ? "Owner" : "Trainer"}</span>}<small>{format(new Date(n.created_at), "d MMM, HH:mm")}</small></span></div></div>)}<Link href="/dashboard/messages" className="panel-action mt-4">Message your coach<ArrowUpRight size={12}/></Link></section><NoticeBoard userId={userId} canPost={false}/></div></>;
 }

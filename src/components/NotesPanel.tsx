@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/client";
 import type { Note } from "@/lib/types";
 import { Lock, Users, Trash2 } from "lucide-react";
 import Avatar from "./Avatar";
+import { toast } from "./ui/Toast";
 
 interface Props {
   clientId: string;
@@ -17,6 +18,7 @@ export default function NotesPanel({ clientId, ptId, authorId, canChooseVisibili
   const supabase = createClient();
   const [notes, setNotes] = useState<Note[]>([]);
   const [content, setContent] = useState("");
+  const [saving, setSaving] = useState(false);
   const [visibility, setVisibility] = useState<"shared" | "pt_only">("shared");
   const [loading, setLoading] = useState(true);
   const [authorRoles, setAuthorRoles] = useState<Record<string, string[]>>({});
@@ -59,23 +61,20 @@ export default function NotesPanel({ clientId, ptId, authorId, canChooseVisibili
   }, [clientId]); // eslint-disable-line
 
   async function addNote() {
-    if (!content.trim()) return;
-    const { error } = await supabase.from("notes").insert({
-      author_id: authorId,
-      client_id: clientId,
-      pt_id: ptId,
-      content: content.trim(),
-      visibility: canChooseVisibility ? visibility : "shared",
-    });
-    if (!error) {
-      setContent("");
-      load();
-    }
+    if (!content.trim() || saving) return;
+    setSaving(true);
+    try {
+      const { error } = await supabase.from("notes").insert({ author_id: authorId, client_id: clientId, pt_id: ptId, content: content.trim(), visibility: isSelfNote ? "pt_only" : canChooseVisibility ? visibility : "shared" });
+      if (error) throw error;
+      setContent(""); toast("Note saved."); await load();
+    } catch { toast("Couldn't save your note. Your draft is still here.", "error"); }
+    finally { setSaving(false); }
   }
-
   async function deleteNote(id: string) {
-    await supabase.from("notes").delete().eq("id", id);
-    load();
+    if (!window.confirm("Delete this note? This cannot be undone.")) return;
+    const { error } = await supabase.from("notes").delete().eq("id", id).eq("author_id", authorId);
+    if (error) { toast("Couldn't delete this note. Please try again.", "error"); return; }
+    toast("Note deleted."); load();
   }
 
   return (
@@ -106,7 +105,7 @@ export default function NotesPanel({ clientId, ptId, authorId, canChooseVisibili
                   </span>
                 )}
                 {n.author_id === authorId && (
-                  <button onClick={() => deleteNote(n.id)} className="text-neutral-600 hover:text-red-400">
+                  <button aria-label="Delete note" onClick={() => deleteNote(n.id)} className="text-neutral-600 hover:text-red-400">
                     <Trash2 size={12} />
                   </button>
                 )}
@@ -120,6 +119,7 @@ export default function NotesPanel({ clientId, ptId, authorId, canChooseVisibili
         <textarea
           className="input-field resize-none"
           rows={2}
+          aria-label="Note content"
           placeholder="Write a note…"
           value={content}
           onChange={(e) => setContent(e.target.value)}
@@ -141,8 +141,8 @@ export default function NotesPanel({ clientId, ptId, authorId, canChooseVisibili
               <Users size={12} /> Visible to your PT
             </span>
           )}
-          <button onClick={addNote} className="btn-primary text-sm px-3 py-1.5">
-            Add
+          <button disabled={saving || !content.trim()} onClick={addNote} className="btn-primary text-sm px-3 py-1.5">
+            {saving ? "Saving..." : "Add note"}
           </button>
         </div>
       </div>

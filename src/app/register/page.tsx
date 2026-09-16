@@ -3,6 +3,8 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import AuthFrame from "@/components/AuthFrame";
+import { Eye, EyeOff, ArrowRight } from "lucide-react";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -11,6 +13,7 @@ export default function RegisterPage() {
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [token, setToken] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -104,115 +107,18 @@ export default function RegisterPage() {
   }
 
   if (checkedSettings && !registrationOpen) {
-    return (
-      <main className="min-h-screen flex items-center justify-center px-4 relative">
-        <div className="card p-8 max-w-sm text-center">
-          <h1 className="text-lg font-semibold mb-2">Registration closed</h1>
-          <p className="text-neutral-400 text-sm mb-4">
-            New sign-ups are currently disabled. Ask your trainer for access.
-          </p>
-          <Link href="/" className="text-gold-400 hover:underline text-sm">
-            Back to sign in
-          </Link>
-        </div>
-        <div className="absolute bottom-4 inset-x-0 text-center text-xs text-neutral-600">
-          © {new Date().getFullYear()} The Movement Coaching
-        </div>
-      </main>
-    );
+    return <AuthFrame title="We'll be back soon." description="New sign-ups are currently disabled. Ask your trainer for access."><Link href="/" className="btn-secondary">Back to sign in</Link></AuthFrame>;
   }
-
-  return (
-    <main className="min-h-screen flex items-center justify-center px-4 relative">
-      <div className="w-full max-w-sm">
-        <div className="text-center mb-8">
-          <h1 className="text-2xl font-bold tracking-tight">
-            Join <span className="text-gold-400">The Movement Coaching</span>
-          </h1>
-          <p className="text-neutral-400 text-sm mt-1">You'll need an invite token from your trainer</p>
-        </div>
-
-        {success ? (
-          <div className="card p-6 text-center space-y-2">
-            <p className="text-gold-400 font-medium">Account created 🎉</p>
-            <p className="text-neutral-400 text-sm">
-              Check your email to confirm your account, then sign in.
-            </p>
-            <Link href="/" className="btn-primary inline-block mt-2">
-              Go to sign in
-            </Link>
-          </div>
-        ) : (
-          <form onSubmit={handleRegister} className="card p-6 space-y-4">
-            {error && (
-              <div className="bg-red-900/30 border border-red-900 text-red-300 text-sm px-3 py-2 rounded-lg">
-                {error}
-              </div>
-            )}
-            <div>
-              <label className="label-text">Registration token</label>
-              <input
-                required
-                className="input-field font-mono"
-                value={token}
-                onChange={(e) => setToken(e.target.value)}
-                placeholder="e.g. TMC-8X3K-QP1Z"
-              />
-            </div>
-            <div>
-              <label className="label-text">Full name</label>
-              <input
-                required
-                className="input-field"
-                value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
-              />
-            </div>
-            <div>
-              <label className="label-text">Username (optional)</label>
-              <input
-                className="input-field"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder="Used to log in instead of your email"
-              />
-            </div>
-            <div>
-              <label className="label-text">Email</label>
-              <input
-                type="email"
-                required
-                className="input-field"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-              />
-            </div>
-            <div>
-              <label className="label-text">Password</label>
-              <input
-                type="password"
-                required
-                minLength={6}
-                className="input-field"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-            </div>
-            <button type="submit" disabled={loading} className="btn-primary w-full">
-              {loading ? "Creating account…" : "Create account"}
-            </button>
-            <p className="text-center text-sm text-neutral-400">
-              Already have an account?{" "}
-              <Link href="/" className="text-gold-400 hover:underline">
-                Sign in
-              </Link>
-            </p>
-          </form>
-        )}
-      </div>
-      <div className="absolute bottom-4 inset-x-0 text-center text-xs text-neutral-600">
-        © {new Date().getFullYear()} The Movement Coaching
-      </div>
-    </main>
-  );
+  return <AuthFrame title={success ? "You're part of the movement." : "Your next chapter."} description={success ? "Your account has been created. Check your email if confirmation is required." : "Bring your invitation. We'll take care of the rest."} label="JOIN THE MOVEMENT">
+    {success ? <div className="auth-success"><p>You're ready to get started. Once your email is confirmed, sign in to see your coaching workspace.</p><Link href="/" className="btn-primary auth-submit mt-4">Continue to sign in<ArrowRight size={15}/></Link></div> : <form onSubmit={handleRegister} className="auth-form" style={{ gap: 14 }}>
+      {error && <div className="error-banner" role="alert">{error}</div>}
+      <div><label htmlFor="reg-token" className="label-text">Invitation token</label><input id="reg-token" required className="input-field font-mono" value={token} onChange={e => setToken(e.target.value)} placeholder="Your token from your coach"/></div>
+      <div><label htmlFor="reg-name" className="label-text">Full name</label><input id="reg-name" required autoComplete="name" className="input-field" value={fullName} onChange={e => setFullName(e.target.value)} placeholder="Your full name"/></div>
+      <div><label htmlFor="reg-username" className="label-text">Username (optional)</label><input id="reg-username" autoComplete="username" autoCapitalize="none" className="input-field" value={username} onChange={e => setUsername(e.target.value)} placeholder="An alternative to your email at sign-in"/></div>
+      <div><label htmlFor="reg-email" className="label-text">Email address</label><input id="reg-email" type="email" required autoComplete="email" className="input-field" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com"/></div>
+      <div><label htmlFor="reg-password" className="label-text">Create a password</label><div className="relative"><input id="reg-password" type={showPassword ? "text" : "password"} required minLength={8} autoComplete="new-password" className="input-field pr-12" value={password} onChange={e => setPassword(e.target.value)} placeholder="At least 8 characters"/><button type="button" className="password-toggle" onClick={() => setShowPassword(v => !v)} aria-label={showPassword ? "Hide password" : "Show password"}>{showPassword ? <EyeOff size={16}/> : <Eye size={16}/>}</button></div></div>
+      <button type="submit" disabled={loading || !checkedSettings} className="btn-primary auth-submit">{loading ? "Creating your account..." : "Let's get started"}<ArrowRight size={15}/></button>
+      <p className="auth-invite">Already part of the movement? <Link href="/">Sign in</Link></p>
+    </form>}
+  </AuthFrame>;
 }
